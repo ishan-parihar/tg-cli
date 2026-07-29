@@ -258,6 +258,7 @@ main() {
     # Check Python
     local py
     py=$(check_python) || exit 1
+    info "Found Python: $py ($("$py" --version 2&1))"
 
     # Try uv first (preferred)
     if install_uv; then
