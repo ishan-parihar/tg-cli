@@ -1,12 +1,18 @@
 """tg-cli — Telegram CLI entry point."""
 
+import asyncio
 import logging
+import os
+import sys
 
 import click
 
 from .data import data_group
 from .query import query_group
 from .tg import tg_group
+from ..client import connect
+from ..console import console
+from ..db import MessageDB
 
 
 def _setup_logging(verbose: bool):
@@ -18,15 +24,95 @@ def _setup_logging(verbose: bool):
     )
 
 
-@click.group()
+def _get_bin_path() -> str:
+    """Get the absolute path of the current executable."""
+    return os.path.abspath(sys.argv[0])
+
+
+def _get_bin_path_with_tilde() -> str:
+    """Get executable path with ~ for home directory."""
+    path = _get_bin_path()
+    home = os.path.expanduser("~")
+    if path.startswith(home):
+        return path.replace(home, "~", 1)
+    return path
+
+
+def _show_home_view():
+    """Display the content-first home view with live data (AXI §8)."""
+    # Try to get live data from local DB
+    stats = {"total_messages": 0, "chat_count": 0, "chats": []}
+
+    # Get local DB stats
+    try:
+        with MessageDB() as db:
+            chats = db.get_chats()
+            stats["total_messages"] = db.count()
+            stats["chat_count"] = len(chats)
+            stats["chats"] = chats[:5]  # Top 5 for preview
+    except Exception:
+        pass
+
+    # Print bin path and description (AXI §10)
+    bin_path = _get_bin_path_with_tilde()
+    console.print(f"bin: {bin_path}")
+    console.print("description: Telegram CLI for syncing chats, searching messages, and local analysis")
+    console.print("")
+
+    # Auth status - based on local DB only
+    if stats["chat_count"] > 0:
+        console.print("auth: [green]✓[/green] Previously authenticated (local data exists)")
+    else:
+        console.print("auth: [red]✗[/red] Not authenticated (run [bold]tg status[/bold] to check)")
+
+    console.print("")
+
+    # Live data preview
+    if stats["chat_count"] > 0:
+        console.print(f"chats: {stats['chat_count']} total ({stats['total_messages']} messages)")
+        console.print("")
+
+        # Show recent chats
+        if stats["chats"]:
+            console.print("recent:")
+            for c in stats["chats"]:
+                console.print(f"  {c['chat_id']}  {c['chat_name'] or '—'}  {c['msg_count']} msgs")
+            if stats["chat_count"] > 5:
+                console.print(f"  ... and {stats['chat_count'] - 5} more")
+            console.print("")
+
+        console.print(f"help: Run [bold]tg chats[/bold] to list all {stats['chat_count']} chats")
+        console.print("help: Run [bold]tg sync-all[/bold] to refresh from Telegram")
+        console.print("help: Run [bold]tg search <keyword>[/bold] to search messages")
+    else:
+        console.print("chats: 0 chats found in local database")
+        console.print("")
+        console.print("help: Run [bold]tg refresh[/bold] to sync from Telegram")
+        console.print("help: Run [bold]tg status[/bold] to check authentication")
+
+    console.print("")
+    console.print("[dim]Run 'tg --help' for all commands[/dim]")
+
+
+@click.group(invoke_without_command=True)
 @click.version_option(package_name="kabi-tg-cli")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
-def cli(verbose: bool):
+@click.pass_context
+def cli(ctx: click.Context, verbose: bool):
     """tg — Telegram CLI for syncing chats, searching messages, and local analysis."""
     _setup_logging(verbose)
+
+    # Content-first: if no subcommand invoked, show home view with live data
+    if ctx.invoked_subcommand is None:
+        _show_home_view()
+        ctx.exit(0)
 
 
 # Register ALL commands at top-level (flat structure, no `tg tg` nonsense)
 for group in (tg_group, query_group, data_group):
     for name, cmd in group.commands.items():
         cli.add_command(cmd, name)
+
+
+if __name__ == "__main__":
+    cli()
