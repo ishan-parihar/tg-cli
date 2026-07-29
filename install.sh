@@ -20,10 +20,10 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-info()  { echo -e "${GREEN}▸${NC} $*"; }
-warn()  { echo -e "${YELLOW}▸${NC} $*"; }
+info()  { echo -e "${GREEN}▸${NC} $*" >&2; }
+warn()  { echo -e "${YELLOW}▸${NC} $*" >&2; }
 err()   { echo -e "${RED}▸${NC} $*" >&2; }
-step()  { echo -e "${BLUE}▸${NC} $*"; }
+step()  { echo -e "${BLUE}▸${NC} $*" >&2; }
 
 # ── Check Python ≥ 3.10 ──────────────────────────────────────────────────
 check_python() {
@@ -42,7 +42,6 @@ check_python() {
         return 1
     fi
 
-    info "Found Python: $py ($("$py" --version 2>&1))"
     echo "$py"
 }
 
