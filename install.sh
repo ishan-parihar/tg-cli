@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # ─── tg-cli installer ───────────────────────────────────────────────
-# curl -sSL https://raw.githubusercontent.com/jackwener/tg-cli/main/install.sh | bash
+# curl -sSL https://raw.githubusercontent.com/ishan-parihar/tg-cli/main/install.sh | bash
 #
 # Installs tg-cli globally using uv (preferred) or pipx/pip as fallback.
 # Handles clean system setup including uv installation and dependency management.
 # ──────────────────────────────────────────────────────────────────────
 
-REPO="https://github.com/jackwener/tg-cli.git"
+REPO="https://github.com/ishan-parihar/tg-cli.git"
 REPO_GIT="git+${REPO}"
 BIN="tg"
 MIN_PYTHON_VERSION="3.10"
