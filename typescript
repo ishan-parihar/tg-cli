@@ -1,0 +1,56 @@
+Script started on 2026-07-29 10:10:47+05:30 [COMMAND="tg refresh" <not executed on terminal>]
+Refreshing local cache[33m...[0m
+[33m⚠ Using default Telegram Desktop API credentials [0m[1;33m([0m[33mapi_id[0m[33m=[0m[1;33m2040[0m[1;33m)[0m[33m.[0m
+[33m  This increases the risk of account restrictions.[0m
+[33m  Get your own at [0m[4;33mhttps://my.telegram.org[0m[33m and set TG_API_ID [0m[33m/[0m[33m TG_API_HASH.[0m
+Traceback (most recent call last):
+  File [35m"/home/ishanp/.local/bin/tg"[0m, line [35m6[0m, in [35m<module>[0m
+    sys.exit([31mcli[0m[1;31m()[0m)
+             [31m~~~[0m[1;31m^^[0m
+  File [35m"/home/ishanp/.local/lib/python3.14/site-packages/click/core.py"[0m, line [35m1569[0m, in [35m__call__[0m
+    return [31mself.main[0m[1;31m(*args, **kwargs)[0m
+           [31m~~~~~~~~~[0m[1;31m^^^^^^^^^^^^^^^^^[0m
+  File [35m"/home/ishanp/.local/lib/python3.14/site-packages/click/core.py"[0m, line [35m1490[0m, in [35mmain[0m
+    rv = self.invoke(ctx)
+  File [35m"/home/ishanp/.local/lib/python3.14/site-packages/click/core.py"[0m, line [35m1970[0m, in [35minvoke[0m
+    return _process_result([31msub_ctx.command.invoke[0m[1;31m(sub_ctx)[0m)
+                           [31m~~~~~~~~~~~~~~~~~~~~~~[0m[1;31m^^^^^^^^^[0m
+  File [35m"/home/ishanp/.local/lib/python3.14/site-packages/click/core.py"[0m, line [35m1353[0m, in [35minvoke[0m
+    return [31mctx.invoke[0m[1;31m(self.callback, **ctx.params)[0m
+           [31m~~~~~~~~~~[0m[1;31m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  File [35m"/home/ishanp/.local/lib/python3.14/site-packages/click/core.py"[0m, line [35m907[0m, in [35minvoke[0m
+    return callback(*args, **kwargs)
+  File [35m"/home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/tg-cli/src/tg_cli/cli/tg.py"[0m, line [35m280[0m, in [35mtg_refresh[0m
+    results = asyncio.run(_run_with_auth(_run(), as_json=as_json, as_yaml=as_yaml, as_toon=as_toon))
+  File [35m"/usr/lib/python3.14/asyncio/runners.py"[0m, line [35m205[0m, in [35mrun[0m
+    return [31mrunner.run[0m[1;31m(main)[0m
+           [31m~~~~~~~~~~[0m[1;31m^^^^^^[0m
+  File [35m"/usr/lib/python3.14/asyncio/runners.py"[0m, line [35m128[0m, in [35mrun[0m
+    return [31mself._loop.run_until_complete[0m[1;31m(task)[0m
+           [31m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m[1;31m^^^^^^[0m
+  File [35m"/usr/lib/python3.14/asyncio/base_events.py"[0m, line [35m719[0m, in [35mrun_until_complete[0m
+    return [31mfuture.result[0m[1;31m()[0m
+           [31m~~~~~~~~~~~~~[0m[1;31m^^[0m
+  File [35m"/home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/tg-cli/src/tg_cli/cli/tg.py"[0m, line [35m30[0m, in [35m_run_with_auth[0m
+    return [1;31mawait coro[0m
+           [1;31m^^^^^^^^^^[0m
+  File [35m"/home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/tg-cli/src/tg_cli/cli/tg.py"[0m, line [35m276[0m, in [35m_run[0m
+    return [1;31mawait sync_all_dialogs([0m
+           [1;31m^^^^^^^^^^^^^^^^^^^^^^^[0m
+        [1;31mlimit=limit, on_chat_done=on_chat_done, delay=delay, max_chats=max_chats[0m
+        [1;31m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+    [1;31m)[0m
+    [1;31m^[0m
+  File [35m"/home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/tg-cli/src/tg_cli/cli/_sync.py"[0m, line [35m21[0m, in [35msync_all_dialogs[0m
+    async with [31mconnect[0m[1;31m()[0m as client:
+               [31m~~~~~~~[0m[1;31m^^[0m
+  File [35m"/usr/lib/python3.14/contextlib.py"[0m, line [35m214[0m, in [35m__aenter__[0m
+    return [1;31mawait anext(self.gen)[0m
+           [1;31m^^^^^^^^^^^^^^^^^^^^^[0m
+  File [35m"/home/ishanp/Documents/GitHub/MY-PROJECTS/MCP-AND-CLIS/tg-cli/src/tg_cli/client.py"[0m, line [35m83[0m, in [35mconnect[0m
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+[1;35mRuntimeError[0m: [35mNot authenticated. Run 'tg refresh' to authenticate, or set TG_API_ID/TG_API_HASH and ensure a valid session exists.[0m
+
+Script done on 2026-07-29 10:10:49+05:30 [COMMAND_EXIT_CODE="1"]

@@ -77,14 +77,46 @@ async def connect() -> AsyncGenerator[TelegramClient, None]:
         lang_code=_LANG_CODE,
         system_lang_code=_SYSTEM_LANG_CODE,
     )
-    await c.connect()
+    # Use start() which handles both initial auth (interactive) and reconnection
+    await c.start()
     try:
-        if not await c.is_user_authorized():
-            raise RuntimeError(
-                "Not authenticated. Run 'tg refresh' to authenticate, or set TG_API_ID/TG_API_HASH "
-                "and ensure a valid session exists."
-            )
         yield c
+    finally:
+        await c.disconnect()
+
+
+async def authenticate() -> bool:
+    """Interactive authentication for first-time setup.
+    Returns True if authentication succeeded."""
+    global _default_api_warned
+    api_id = get_api_id()
+    api_hash = get_api_hash()
+
+    if not _default_api_warned and is_default_api_id():
+        _default_api_warned = True
+        if sys.stdout.isatty():
+            console.print(
+                "[yellow]⚠ Using default Telegram Desktop API credentials (api_id=2040).\n"
+                "  This increases the risk of account restrictions.\n"
+                "  Get your own at https://my.telegram.org and set TG_API_ID / TG_API_HASH.[/yellow]"
+            )
+
+    c = TelegramClient(
+        get_session_path(),
+        api_id,
+        api_hash,
+        device_model=_DEVICE_MODEL,
+        system_version=_SYSTEM_VERSION,
+        app_version=_APP_VERSION,
+        lang_code=_LANG_CODE,
+        system_lang_code=_SYSTEM_LANG_CODE,
+    )
+    try:
+        await c.start()
+        return True
+    except Exception as e:
+        console.print(f"[red]Authentication failed: {e}[/red]")
+        return False
     finally:
         await c.disconnect()
 

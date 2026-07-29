@@ -7,7 +7,7 @@ import click
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from ..client import connect, fetch_history, get_chat_info, list_chats, listen
+from ..client import authenticate, connect, fetch_history, get_chat_info, list_chats, listen
 from ..console import console
 from ..db import MessageDB
 from ._chat import _parse_chat, resolve_chat_id_or_print
@@ -68,6 +68,17 @@ def _telegram_user_payload(me) -> dict[str, str | int]:
 def tg_group():
     """Telegram operations — connect, fetch, sync, listen."""
     pass
+
+
+@tg_group.command("auth")
+def tg_auth():
+    """Interactive first-time authentication with Telegram."""
+    success = asyncio.run(authenticate())
+    if success:
+        console.print("[green]✓[/green] Authentication successful. Run 'tg refresh' to sync.")
+    else:
+        console.print("[red]Authentication failed.[/red]")
+        raise SystemExit(1)
 
 
 @tg_group.command("chats")
