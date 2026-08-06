@@ -214,6 +214,15 @@ systemctl --user enable --now tg-refresh.timer
 
 ---
 
+## Limitations
+
+- **Full mutation surface** — send/edit/delete verified end-to-end (message send → edit → delete round-trip; deleting an already-deleted message returns `MessageIdInvalidError` confirming the delete landed).
+- **Deletion is soft** — Telegram deletes messages rather than permanently wiping history server-side; deleted messages vanish from sync but may remain recoverable server-side depending on account settings.
+- **MTProto rate limits** — Telegram's flood-control limits (spam-triggered `FLOOD_WAIT`) apply; `--delay` between sends mitigates it.
+- **Self-chat only for verification** — messaging yourself (`peer` = your own id) is the safe test surface; mass unsolicited sends trigger Telegram's anti-spam.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Fix |
