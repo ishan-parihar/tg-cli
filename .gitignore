@@ -12,3 +12,14 @@ build/
 *.session-wal
 data/
 .pytest_cache/
+
+# ---- tool-state / session artifacts (never commit) ----
+.cortexkit/
+.contexty/
+.hive/
+.memsearch/
+.opencode/
+.cortex/
+.sisyphus/
+.oh-my-opencode/
+.history/
