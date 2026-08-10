@@ -1,8 +1,11 @@
 # tg-cli
 
+<!-- T2I HERO SPEC — Subject: a local-first Telegram mirror — your Telegram account (MTProto) on the left syncing into a local SQLite cache vault, with search/export/agent-query beams (JSON, YAML, TOON) fanning out to an AI agent on the right; a clock/automation ring around the vault. Composition: left-to-right sync pipeline, vault as the center of gravity. Palette: Telegram sky #229ed9 → deep slate #0f172a → cache emerald #34d399 → agent violet #8b5cf6. Style: dark flat vector, glowing sync pulses, no text. 16:9. -->
+
 [![CI](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/kabi-tg-cli)](https://pypi.org/project/kabi-tg-cli/)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/pypi/v/kabi-tg-cli?label=version)](https://pypi.org/project/kabi-tg-cli/)
 
 > **PyPI package:** [`kabi-tg-cli`](https://pypi.org/project/kabi-tg-cli/) — install with `uv tool install kabi-tg-cli`
 
@@ -13,6 +16,17 @@ Telethon-powered Telegram CLI for local-first sync, search, export, and agent-fr
 ## What it does
 
 `tg-cli` uses your own Telegram account over MTProto (not Bot API). It syncs messages into a local SQLite cache so humans and AI agents can query the same data quickly with `--json`, `--yaml`, or `--toon` output.
+
+## How it compares
+
+| Capability | **tg-cli** | Telegram Desktop | Telethon scripts | tgt / other CLIs |
+|---|---|---|---|---|
+| **Local SQLite mirror** | ✅ full-text searchable cache | ⚠️ local DB, not queryable | ❌ ad-hoc | ⚠️ |
+| **Agent-friendly output** | ✅ `--json` / `--yaml` / `--toon` | ❌ GUI | ⚠️ custom | ⚠️ |
+| **Scheduled automation** | ✅ built-in scheduling | ❌ | ⚠️ | ⚠️ |
+| **Your account, MTProto** | ✅ no bot limits | ✅ | ✅ | ✅ |
+| **Search + export + sync** | ✅ one tool | ⚠️ export only | ⚠️ | ✅ |
+| **Installable as agent skill** | ✅ | ❌ | ❌ | ❌ |
 
 **First successful action:**
 
