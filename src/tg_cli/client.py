@@ -64,7 +64,8 @@ async def connect() -> AsyncGenerator[TelegramClient, None]:
             console.print(
                 "[yellow]⚠ Using default Telegram Desktop API credentials (api_id=2040).\n"
                 "  This increases the risk of account restrictions.\n"
-                "  Get your own at https://my.telegram.org and set TG_API_ID / TG_API_HASH.[/yellow]"
+                "  Get your own at https://my.telegram.org and set "
+                "TG_API_ID / TG_API_HASH.[/yellow]"
             )
 
     c = TelegramClient(
@@ -98,7 +99,8 @@ async def authenticate() -> bool:
             console.print(
                 "[yellow]⚠ Using default Telegram Desktop API credentials (api_id=2040).\n"
                 "  This increases the risk of account restrictions.\n"
-                "  Get your own at https://my.telegram.org and set TG_API_ID / TG_API_HASH.[/yellow]"
+                "  Get your own at https://my.telegram.org and set "
+                "TG_API_ID / TG_API_HASH.[/yellow]"
             )
 
     c = TelegramClient(

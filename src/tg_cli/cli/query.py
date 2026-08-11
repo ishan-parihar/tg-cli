@@ -12,10 +12,10 @@ from ._chat import resolve_chat_id_or_print
 from ._output import (
     emit_error,
     emit_structured,
-    structured_output_options,
     get_help_hints,
+    structured_output_options,
 )
-
+from ._sync import sync_all_dialogs, sync_chat_dialog
 
 # Minimal default schemas per AXI spec
 SEARCH_DEFAULT_FIELDS = ["id", "timestamp", "sender_name", "chat_name", "content"]
@@ -65,7 +65,8 @@ def _maybe_sync_first(chat: str | None, sync_first: bool, sync_limit: int) -> No
             matches = db.find_chats(chat)
         if len(matches) > 1:
             return
-        asyncio.run(sync_all_dialogs(limit=sync_limit))
+        # A unique chat match: sync just that chat, not the whole dialog list.
+        asyncio.run(sync_chat_dialog(chat, limit=sync_limit))
         return
 
     asyncio.run(sync_all_dialogs(limit=sync_limit))
@@ -132,16 +133,19 @@ def search(
 
     field_list = _parse_fields(fields, SEARCH_DEFAULT_FIELDS)
 
-    # Pre-computed aggregate: total count (even if limited)
-    payload = {
-        "count": len(results),
-        "total": len(results),
-        "keyword": keyword,
-        "messages": _apply_field_filter(
-            [{**r, "content": r.get("content", "") if full else _truncate_content(r.get("content", ""))} for r in results],
-            field_list,
-        ),
-    }
+    # Structured output: the message list itself (SCHEMA.md: query commands return lists).
+    payload = _apply_field_filter(
+        [
+            {
+                **r,
+                "content": r.get("content", "")
+                if full
+                else _truncate_content(r.get("content", "")),
+            }
+            for r in results
+        ],
+        field_list,
+    )
 
     if emit_structured(payload, as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
         for hint in get_help_hints("search"):
@@ -226,15 +230,19 @@ def recent(
 
     field_list = _parse_fields(fields, RECENT_DEFAULT_FIELDS)
 
-    payload = {
-        "count": len(msgs),
-        "total": len(msgs),
-        "hours": hours,
-        "messages": _apply_field_filter(
-            [{**m, "content": m.get("content", "") if full else _truncate_content(m.get("content", ""))} for m in msgs],
-            field_list,
-        ),
-    }
+    # Structured output: the message list itself (SCHEMA.md: query commands return lists).
+    payload = _apply_field_filter(
+        [
+            {
+                **m,
+                "content": m.get("content", "")
+                if full
+                else _truncate_content(m.get("content", "")),
+            }
+            for m in msgs
+        ],
+        field_list,
+    )
 
     if emit_structured(payload, as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
         for hint in get_help_hints("recent"):
@@ -278,7 +286,14 @@ def recent(
     help="Max messages per chat when using --sync-first",
 )
 @structured_output_options
-def stats(sync_first: bool, sync_limit: int, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def stats(
+    sync_first: bool,
+    sync_limit: int,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
     """Show message statistics per chat."""
     _maybe_sync_first(None, sync_first, sync_limit)
 
@@ -289,8 +304,7 @@ def stats(sync_first: bool, sync_limit: int, as_json: bool, as_yaml: bool, as_to
     field_list = _parse_fields(fields, STATS_DEFAULT_FIELDS)
 
     payload = {
-        "total_messages": total,
-        "chat_count": len(chats),
+        "total": total,
         "chats": _apply_field_filter(chats, field_list),
     }
 
@@ -487,7 +501,16 @@ def timeline(
 )
 @click.option("--full", is_flag=True, help="Show full content without truncation")
 @structured_output_options
-def today(chat: str | None, sync_first: bool, sync_limit: int, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None, full: bool):
+def today(
+    chat: str | None,
+    sync_first: bool,
+    sync_limit: int,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+    full: bool,
+):
     """Show today's messages, grouped by chat."""
     from datetime import datetime
 
@@ -513,7 +536,15 @@ def today(chat: str | None, sync_first: bool, sync_limit: int, as_json: bool, as
         "latest_timestamp": latest_ts,
         "chats": {
             chat_name: _apply_field_filter(
-                [{**m, "content": m.get("content", "") if full else _truncate_content(m.get("content", ""))} for m in chat_msgs],
+                [
+                    {
+                        **m,
+                        "content": m.get("content", "")
+                        if full
+                        else _truncate_content(m.get("content", "")),
+                    }
+                    for m in chat_msgs
+                ],
                 field_list,
             )
             for chat_name, chat_msgs in grouped.items()
@@ -542,7 +573,9 @@ def today(chat: str | None, sync_first: bool, sync_limit: int, as_json: bool, as
 
     # Group by chat
     for chat_name, chat_msgs in sorted(grouped.items(), key=lambda x: -len(x[1])):
-        console.print(f"\n[bold cyan]\u2550\u2550\u2550 {chat_name} ({len(chat_msgs)} msgs) \u2550\u2550\u2550[/bold cyan]")
+        console.print(
+            f"\n[bold cyan]═══ {chat_name} ({len(chat_msgs)} msgs) ═══[/bold cyan]"
+        )
         for m in chat_msgs:
             ts = (m.get("timestamp") or "")[11:19]
             sender = m.get("sender_name") or "Unknown"
@@ -627,7 +660,15 @@ def filter_msgs(
         "chat_count": len(grouped),
         "chats": {
             chat_name: _apply_field_filter(
-                [{**m, "content": m.get("content", "") if full else _truncate_content(m.get("content", ""))} for m in chat_msgs],
+                [
+                    {
+                        **m,
+                        "content": m.get("content", "")
+                        if full
+                        else _truncate_content(m.get("content", "")),
+                    }
+                    for m in chat_msgs
+                ],
                 field_list,
             )
             for chat_name, chat_msgs in grouped.items()
@@ -647,7 +688,9 @@ def filter_msgs(
 
     # Group by chat
     for chat_name, chat_msgs in sorted(grouped.items(), key=lambda x: -len(x[1])):
-        console.print(f"\n[bold cyan]\u2550\u2550\u2550 {chat_name} ({len(chat_msgs)} matches) \u2550\u2550\u2550[/bold cyan]")
+        console.print(
+            f"\n[bold cyan]═══ {chat_name} ({len(chat_msgs)} matches) ═══[/bold cyan]"
+        )
         for m in chat_msgs:
             ts = (m.get("timestamp") or "")[:19]
             sender = m.get("sender_name") or "Unknown"

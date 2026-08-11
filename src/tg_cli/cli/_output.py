@@ -94,7 +94,7 @@ def default_structured_format(
     *,
     as_json: bool,
     as_yaml: bool,
-    as_toon: bool,
+    as_toon: bool = False,
 ) -> str | None:
     """Resolve explicit flags first, then fall back to env and TTY defaults."""
     explicit_count = sum([as_json, as_yaml, as_toon])
@@ -116,8 +116,9 @@ def default_structured_format(
     if output_mode == "rich":
         return None
     if not sys.stdout.isatty():
-        # Default to TOON for non-interactive (machine-readable)
-        return "toon"
+        # Non-interactive (machine-readable): default to YAML per SCHEMA.md.
+        # TOON remains available via --toon / OUTPUT=toon.
+        return "yaml"
     return None
 
 
@@ -125,7 +126,9 @@ def structured_output_options(command: Callable) -> Callable:
     """Add --json/--yaml/--toon/--fields flags to a click command."""
     command = click.option("--yaml", "as_yaml", is_flag=True, help="Output as YAML")(command)
     command = click.option("--json", "as_json", is_flag=True, help="Output as JSON")(command)
-    command = click.option("--toon", "as_toon", is_flag=True, help="Output as TOON (default for non-TTY)")(command)
+    command = click.option(
+        "--toon", "as_toon", is_flag=True, help="Output as TOON (default for non-TTY)"
+    )(command)
     command = click.option(
         "--fields",
         "fields",
@@ -139,10 +142,10 @@ def emit_structured(
     *,
     as_json: bool,
     as_yaml: bool,
-    as_toon: bool,
+    as_toon: bool = False,
 ) -> bool:
     """Emit structured output and return True when a structured format was used.
-    
+
     Note: Field filtering is handled by individual commands via --fields flag.
     This function only handles format serialization.
     """
@@ -220,7 +223,9 @@ def emit_error(
         as_yaml = bool(params.get("as_yaml", False)) if as_yaml is None else as_yaml
         as_toon = bool(params.get("as_toon", False)) if as_toon is None else as_toon
 
-    fmt = default_structured_format(as_json=bool(as_json), as_yaml=bool(as_yaml), as_toon=bool(as_toon))
+    fmt = default_structured_format(
+        as_json=bool(as_json), as_yaml=bool(as_yaml), as_toon=bool(as_toon)
+    )
     if fmt is None:
         return False
     payload = error_payload(code, message, details=details)

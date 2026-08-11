@@ -1,5 +1,7 @@
 [build-system]
-requires = ["hatchling"]
+# Pin hatchling to the 1.27–1.28 range: it emits Metadata-Version 2.4, which
+# twine's metadata validator accepts (newer hatchling writes 2.5 and fails CI).
+requires = ["hatchling>=1.27,<1.29"]
 build-backend = "hatchling.build"
 
 [project]

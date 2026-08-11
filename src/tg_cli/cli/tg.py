@@ -13,13 +13,12 @@ from ..db import MessageDB
 from ._chat import _parse_chat, resolve_chat_id_or_print
 from ._output import (
     default_structured_format,
-    dump_structured,
     dump_toon,
     emit_structured,
     error_payload,
+    get_help_hints,
     structured_output_options,
     success_payload,
-    get_help_hints,
 )
 from ._sync import sync_all_dialogs, sync_chat_dialog
 
@@ -33,7 +32,9 @@ async def _run_with_auth(coro, *, as_json: bool, as_yaml: bool, as_toon: bool):
             fmt = default_structured_format(as_json=as_json, as_yaml=as_yaml, as_toon=as_toon)
             if fmt:
                 click.echo(dump_toon(error_payload("auth_required", str(exc))))
-                return None
+                # Exit non-zero so callers can treat None as "command returned no data"
+                # (e.g. chat not found) rather than conflating it with auth failure.
+                raise SystemExit(1) from None
         raise
 
 
@@ -84,7 +85,9 @@ def tg_auth():
 @tg_group.command("chats")
 @click.option("--type", "chat_type", help="Filter by type: user, group, supergroup, channel")
 @structured_output_options
-def tg_chats(chat_type: str | None, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_chats(
+    chat_type: str | None, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None
+):
     """List joined Telegram chats."""
 
     async def _run():
@@ -99,12 +102,8 @@ def tg_chats(chat_type: str | None, as_json: bool, as_yaml: bool, as_toon: bool,
     field_list = _parse_fields(fields, CHATS_DEFAULT_FIELDS)
     filtered_chats = [{k: c.get(k) for k in field_list if k in c} for c in chats]
 
-    # Pre-computed aggregate: total count
-    payload = {
-        "count": len(chats),
-        "total": len(chats),
-        "chats": filtered_chats,
-    }
+    # Structured output: the chat list itself (SCHEMA.md: query commands return lists).
+    payload = filtered_chats
 
     if emit_structured(payload, as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
         # Add contextual help hints for TOON/JSON/YAML output
@@ -138,7 +137,9 @@ def tg_chats(chat_type: str | None, as_json: bool, as_yaml: bool, as_toon: bool,
 @click.argument("chat")
 @click.option("-n", "--limit", default=1000, help="Max messages to fetch")
 @structured_output_options
-def tg_history(chat: str, limit: int, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_history(
+    chat: str, limit: int, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None
+):
     """Fetch historical messages from CHAT (name, username, or numeric ID)."""
 
     async def _run():
@@ -223,7 +224,15 @@ def tg_sync(chat: str, limit: int, as_json: bool, as_yaml: bool, as_toon: bool, 
     help="Max number of chats to sync per run (default: all)",
 )
 @structured_output_options
-def tg_sync_all(limit: int, delay: float, max_chats: int | None, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_sync_all(
+    limit: int,
+    delay: float,
+    max_chats: int | None,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
     """Sync all currently available Telegram dialogs with a single connection."""
 
     async def _run():
@@ -268,7 +277,15 @@ def tg_sync_all(limit: int, delay: float, max_chats: int | None, as_json: bool, 
     help="Max number of chats to sync per run (default: all)",
 )
 @structured_output_options
-def tg_refresh(limit: int, delay: float, max_chats: int | None, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_refresh(
+    limit: int,
+    delay: float,
+    max_chats: int | None,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
     """Refresh the local cache from all current Telegram dialogs."""
 
     async def _run():
@@ -370,6 +387,9 @@ def tg_info(chat: str, as_json: bool, as_yaml: bool, as_toon: bool, fields: str 
 
     info = asyncio.run(_run_with_auth(_run(), as_json=as_json, as_yaml=as_yaml, as_toon=as_toon))
     if info is None:
+        # _run_with_auth raises SystemExit(1) on auth failure, so None here means
+        # get_chat_info reported the chat as not found.
+        console.print(f"[red]Could not find chat: {chat}[/red]")
         return
     if not info:
         console.print(f"[red]Could not find chat: {chat}[/red]")
@@ -530,7 +550,16 @@ def tg_send(
 @click.argument("new_text")
 @click.option("--no-preview", is_flag=True, help="Disable link preview")
 @structured_output_options
-def tg_edit(chat: str, msg_id: int, new_text: str, no_preview: bool, as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_edit(
+    chat: str,
+    msg_id: int,
+    new_text: str,
+    no_preview: bool,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
     """Edit a previously sent message. CHAT MSG_ID NEW_TEXT."""
 
     async def _run():
@@ -557,7 +586,14 @@ def tg_edit(chat: str, msg_id: int, new_text: str, no_preview: bool, as_json: bo
 @click.argument("chat")
 @click.argument("msg_ids", nargs=-1, type=int, required=True)
 @structured_output_options
-def tg_delete(chat: str, msg_ids: tuple[int, ...], as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+def tg_delete(
+    chat: str,
+    msg_ids: tuple[int, ...],
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
     """Delete one or more messages. CHAT MSG_ID [MSG_ID ...]."""
 
     async def _run():

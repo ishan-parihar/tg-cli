@@ -6,11 +6,9 @@ from ..console import console
 from ..db import MessageDB
 from ._chat import resolve_chat_id_or_print
 from ._output import (
-    default_structured_format,
     dump_structured,
     emit_error,
     emit_structured,
-    error_payload,
     get_help_hints,
     structured_output_options,
 )
@@ -23,7 +21,9 @@ def data_group():
 
 @data_group.command("export")
 @click.argument("chat")
-@click.option("-f", "--format", "fmt", type=click.Choice(["text", "json", "yaml", "toon"]), default="text")
+@click.option(
+    "-f", "--format", "fmt", type=click.Choice(["text", "json", "yaml", "toon"]), default="text"
+)
 @click.option("-o", "--output", "output_file", help="Output file path")
 @click.option("--hours", type=int, help="Only export last N hours")
 @click.option("--full", is_flag=True, help="Show full content without truncation")
@@ -51,7 +51,13 @@ def export(
             msgs = db.get_recent(chat_id=chat_id, hours=None, limit=100000)
 
     if not msgs:
-        if emit_error("no_messages", f"No messages found for '{chat}'.", as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
+        if emit_error(
+            "no_messages",
+            f"No messages found for '{chat}'.",
+            as_json=as_json,
+            as_yaml=as_yaml,
+            as_toon=as_toon,
+        ):
             raise SystemExit(1)
         console.print(f"[yellow]No messages found for '{chat}'.[/yellow]")
         return
@@ -78,6 +84,7 @@ def export(
             content = dump_structured(msgs, fmt="yaml")
         else:
             from ._output import dump_toon
+
             content = dump_toon(msgs)
     else:
         lines = []

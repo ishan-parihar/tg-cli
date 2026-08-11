@@ -1,22 +1,19 @@
 """tg-cli — Telegram CLI entry point."""
 
-import asyncio
+import json
 import logging
 import os
 import sys
-import json
 
 import click
 
+from ..console import console
+from ..db import MessageDB
 from .data import data_group
 from .query import query_group
 from .tg import tg_group
-from ..client import connect
-from ..console import console
-from ..db import MessageDB
 
-
-HOOK_TEMPLATE_CLAUDE = '''
+HOOK_TEMPLATE_CLAUDE = """
 {
   "hooks": {
     "SessionStart": [
@@ -32,9 +29,9 @@ HOOK_TEMPLATE_CLAUDE = '''
     ]
   }
 }
-'''
+"""
 
-HOOK_TEMPLATE_CODEX = '''
+HOOK_TEMPLATE_CODEX = """
 {
   "hooks": {
     "SessionStart": [
@@ -44,9 +41,9 @@ HOOK_TEMPLATE_CODEX = '''
     ]
   }
 }
-'''
+"""
 
-HOOK_TEMPLATE_OPENCODE = '''
+HOOK_TEMPLATE_OPENCODE = """
 # tg-cli OpenCode plugin
 import subprocess
 import json
@@ -62,7 +59,8 @@ async def on_start():
 
 async def on_chat_end():
     return {}
-'''
+"""
+
 
 def _setup_logging(verbose: bool):
     level = logging.DEBUG if verbose else logging.WARNING
@@ -105,7 +103,9 @@ def _show_home_view():
     # Print bin path and description (AXI §10)
     bin_path = _get_bin_path_with_tilde()
     console.print(f"bin: {bin_path}")
-    console.print("description: Telegram CLI for syncing chats, searching messages, and local analysis")
+    console.print(
+        "description: Telegram CLI for syncing chats, searching messages, and local analysis"
+    )
     console.print("")
 
     # Auth status - based on local DB only
@@ -166,7 +166,9 @@ for group in (tg_group, query_group, data_group):
 @cli.command()
 @click.option("--claude", is_flag=True, help="Install Claude Code hook (~/.claude/settings.json)")
 @click.option("--codex", is_flag=True, help="Install Codex hook (~/.codex/hooks.json)")
-@click.option("--opencode", is_flag=True, help="Install OpenCode plugin (~/.config/opencode/plugins/tg-cli/)")
+@click.option(
+    "--opencode", is_flag=True, help="Install OpenCode plugin (~/.config/opencode/plugins/tg-cli/)"
+)
 @click.option("--all", "all_hooks", is_flag=True, help="Install all supported hooks")
 def setup(claude: bool, codex: bool, opencode: bool, all_hooks: bool):
     """Install session hooks for AI agents (AXI §7).
@@ -177,7 +179,6 @@ def setup(claude: bool, codex: bool, opencode: bool, all_hooks: bool):
         tg setup --codex --opencode # Install Codex and OpenCode hooks
     """
     import os
-    import json
     import shutil
     from pathlib import Path
 
@@ -190,30 +191,37 @@ def setup(claude: bool, codex: bool, opencode: bool, all_hooks: bool):
         claude = codex = opencode = True
 
     if not any([claude, codex, opencode]):
-        console.print("[yellow]No target specified. Use --claude, --codex, --opencode, or --all[/yellow]")
+        console.print(
+            "[yellow]No target specified. Use --claude, --codex, --opencode, or --all[/yellow]"
+        )
         return
 
     # --- Claude Code hook ---
     if claude:
         hook_path = Path.home() / ".claude" / "settings.json"
         hook_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         if hook_path.exists():
             with open(hook_path) as f:
                 settings = json.load(f)
         else:
             settings = {}
-        
+
         if "hooks" not in settings:
             settings["hooks"] = {}
         if "SessionStart" not in settings["hooks"]:
             settings["hooks"]["SessionStart"] = []
-        
+
         # Normalize to list of dicts with hooks
-        if settings["hooks"]["SessionStart"] and not isinstance(settings["hooks"]["SessionStart"][0], dict):
+        if settings["hooks"]["SessionStart"] and not isinstance(
+            settings["hooks"]["SessionStart"][0], dict
+        ):
             # Old format: list of strings
-            settings["hooks"]["SessionStart"] = [{"hooks": [{"type": "command", "command": c}]} for c in settings["hooks"]["SessionStart"]]
-        
+            settings["hooks"]["SessionStart"] = [
+                {"hooks": [{"type": "command", "command": c}]}
+                for c in settings["hooks"]["SessionStart"]
+            ]
+
         # Check if our hook already exists
         hook_cmd = f"{bin_path} --toon 2>/dev/null || echo 'tg-cli not in PATH'"
         existing = False
@@ -223,52 +231,51 @@ def setup(claude: bool, codex: bool, opencode: bool, all_hooks: bool):
                     if h.get("command", "").startswith(bin_path):
                         existing = True
                         break
-        
+
         if not existing:
-            settings["hooks"]["SessionStart"].append({
-                "matcher": "*",
-                "hooks": [{"type": "command", "command": hook_cmd}]
-            })
+            settings["hooks"]["SessionStart"].append(
+                {"matcher": "*", "hooks": [{"type": "command", "command": hook_cmd}]}
+            )
             with open(hook_path, "w") as f:
                 json.dump(settings, f, indent=2)
             console.print(f"[green]✓[/green] Claude Code hook installed: {hook_path}")
         else:
-            console.print(f"[dim]Claude Code hook already exists[/dim]")
+            console.print("[dim]Claude Code hook already exists[/dim]")
 
     # --- Codex hook ---
     if codex:
         hook_path = Path.home() / ".codex" / "hooks.json"
         hook_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         if hook_path.exists():
             with open(hook_path) as f:
                 hooks = json.load(f)
         else:
             hooks = {"hooks": {"SessionStart": []}}
-        
+
         hook_cmd = f"{bin_path} --toon 2>/dev/null || echo 'tg-cli not in PATH'"
         existing = False
         for hook in hooks.get("hooks", {}).get("SessionStart", []):
             if hook.get("command", "").startswith(bin_path):
                 existing = True
                 break
-        
+
         if not existing:
-            hooks.setdefault("hooks", {}).setdefault("SessionStart", []).append({
-                "command": hook_cmd
-            })
+            hooks.setdefault("hooks", {}).setdefault("SessionStart", []).append(
+                {"command": hook_cmd}
+            )
             with open(hook_path, "w") as f:
                 json.dump(hooks, f, indent=2)
             console.print(f"[green]✓[/green] Codex hook installed: {hook_path}")
         else:
-            console.print(f"[dim]Codex hook already exists[/dim]")
+            console.print("[dim]Codex hook already exists[/dim]")
 
     # --- OpenCode plugin ---
     if opencode:
         plugin_dir = Path.home() / ".config" / "opencode" / "plugins" / "tg-cli"
         plugin_dir.mkdir(parents=True, exist_ok=True)
         plugin_file = plugin_dir / "index.py"
-        
+
         plugin_content = f"""# tg-cli OpenCode plugin
 import subprocess
 import json

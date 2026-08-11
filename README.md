@@ -170,8 +170,8 @@ All query commands support `--sync-first` to refresh before reading.
 
 | Flag | Description |
 |------|-------------|
-| `--toon` | **Default for non-TTY** — Token-Oriented Object Notation (~40% smaller than JSON) |
-| `--yaml` | Token-efficient, human-readable |
+| `--toon` | Token-Oriented Object Notation (~40% smaller than JSON) — opt-in via `--toon` |
+| `--yaml` | **Default for non-TTY** — token-efficient, human-readable |
 | `--json` | Strict JSON for `jq` / downstream schemas |
 | `--fields id,timestamp,content` | Minimal schema (3-4 cols) |
 | `--full` | Disable content truncation (default: 500 chars) |
