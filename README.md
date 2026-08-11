@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/kabi-tg-cli)](https://pypi.org/project/kabi-tg-cli/)
-![LOC](https://img.shields.io/badge/LOC-4.6K-informational?style=flat-square)
+![LOC](https://img.shields.io/badge/LOC-4.8K-informational?style=flat-square)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/pypi/v/kabi-tg-cli?label=version)](https://pypi.org/project/kabi-tg-cli/)
 
