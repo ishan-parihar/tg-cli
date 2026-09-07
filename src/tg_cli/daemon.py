@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from telethon import events
 from telethon.errors import FloodWaitError
@@ -259,3 +260,117 @@ def stop() -> dict:
     except OSError as e:
         return {"stopped": False, "reason": str(e)}
     return {"stopped": True, "pid": hb["pid"]}
+
+
+# --- systemd user unit management (Linux) ---------------------------------
+
+_UNIT_NAME = "tg-cli-daemon.service"
+_LINGERING_MIN_UID = 1000
+
+
+def _systemd_available() -> bool:
+    """True when systemctl is on PATH and the user can run user units."""
+    if sys.platform != "linux":
+        return False
+    if shutil.which("systemctl") is None:
+        return False
+    # systemd-run user instance needs either root OR an existing user manager.
+    try:
+        r = subprocess.run(
+            ["systemctl", "--user", "status"], capture_output=True, timeout=2
+        )
+        # Exit 0 means user manager is running; 1/3 with "Failed to connect"
+        # means no manager (no lingering, or no systemd user instance).
+        return r.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _user_unit_dir() -> Path:
+    """Return the systemd user unit directory for the current user."""
+    base = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    if base:
+        return Path(base).expanduser() / "systemd" / "user"
+    return Path.home() / ".config" / "systemd" / "user"
+
+
+def _unit_path() -> Path:
+    return _user_unit_dir() / _UNIT_NAME
+
+
+_UNIT_TEMPLATE = """\
+[Unit]
+Description=tg-cli persistent Telegram client (live updates + queue delivery)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={binary} daemon run --interval {interval}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
+"""
+
+
+def install_systemd(interval: float = 5.0, enable_linger: bool = True) -> dict:
+    """Install the systemd user unit, enable it, start it.  Returns a payload.
+
+    Side effects:
+    - writes the unit file (idempotent — refreshed on each call)
+    - enables linger if the user can (so the daemon survives logout)
+    - runs ``systemctl --user daemon-reload``
+    - enables + starts the unit
+    """
+    if not _systemd_available():
+        return {"installed": False, "reason": "systemd user manager not available"}
+    binary = shutil.which("tg") or sys.argv[0]
+    unit_path = _unit_path()
+    unit_path.parent.mkdir(parents=True, exist_ok=True)
+    unit_path.write_text(
+        _UNIT_TEMPLATE.format(binary=shlex_quote(binary), interval=interval)
+    )
+    os.chmod(unit_path, 0o644)
+    # Enable linger so the user manager survives logout (so the daemon runs).
+    if enable_linger and os.geteuid() >= _LINGERING_MIN_UID:
+        subprocess.run(
+            ["loginctl", "enable-linger", str(os.geteuid())],
+            capture_output=True,
+            check=False,
+        )
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    subprocess.run(["systemctl", "--user", "enable", _UNIT_NAME], check=False)
+    start = subprocess.run(
+        ["systemctl", "--user", "restart", _UNIT_NAME], check=False
+    )
+    return {
+        "installed": True,
+        "unit": str(unit_path),
+        "started": start.returncode == 0,
+        "linger_enabled": enable_linger,
+        "binary": binary,
+    }
+
+
+def shlex_quote(s: str) -> str:
+    """Quote a binary path for systemd's ExecStart without requiring shlex."""
+    import shlex
+
+    return shlex.quote(s)
+
+
+def uninstall_systemd() -> dict:
+    """Stop, disable, and remove the systemd user unit."""
+    if not _systemd_available():
+        return {"uninstalled": False, "reason": "systemd user manager not available"}
+    subprocess.run(["systemctl", "--user", "disable", "--now", _UNIT_NAME], check=False)
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    unit_path = _unit_path()
+    removed = False
+    if unit_path.exists():
+        unit_path.unlink()
+        removed = True
+    subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+    return {"uninstalled": removed, "unit": str(unit_path)}

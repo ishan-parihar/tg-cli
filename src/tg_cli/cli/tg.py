@@ -131,20 +131,53 @@ def tg_group():
 
 
 @tg_group.command("auth")
+@click.option(
+    "--auto-start/--no-auto-start",
+    default=True,
+    help="Auto-start the daemon after successful auth (default: on).",
+)
 @structured_output_options
-def tg_auth(as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
-    """Interactive first-time authentication with Telegram."""
+def tg_auth(
+    auto_start: bool,
+    as_json: bool,
+    as_yaml: bool,
+    as_toon: bool,
+    fields: str | None,
+):
+    """Interactive first-time authentication with Telegram.
+
+    On success, also attempts to launch the daemon so the install is
+    production-ready in one step.  Use ``--no-auto-start`` to skip the
+    daemon bootstrap (e.g. for scripted setups).
+    """
     success = asyncio.run(authenticate())
-    if success:
-        payload = {"authenticated": True}
-        if emit_structured(success_payload(payload),
-                            as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
-            return
-        console.print("[green]✓[/green] Authentication successful. Run 'tg refresh' to sync.")
-    else:
-        # Soft failure so agent loops can read the error instead of crashing.
-        _soft("auth_failed", "Authentication failed.", None,
-              as_json=as_json, as_yaml=as_yaml, as_toon=as_toon)
+    flags = dict(as_json=as_json, as_yaml=as_yaml, as_toon=as_toon)
+    if not success:
+        _soft("auth_failed", "Authentication failed.", None, **flags)
+        return
+    daemon_result = None
+    if auto_start:
+        if daemon_mod.install_systemd(interval=5.0).get("installed"):
+            daemon_result = "systemd"
+        elif daemon_mod.is_daemon_alive():
+            daemon_result = "already_running"
+        else:
+            started = daemon_mod.start_detached(interval=5.0)
+            daemon_result = "started" if started.get("started") else "failed"
+    payload = {"authenticated": True, "daemon": daemon_result}
+    if emit_structured(success_payload(payload), **flags):
+        return
+    console.print("[green]✓[/green] Authentication successful.")
+    if daemon_result == "systemd":
+        console.print(
+            "[green]✓[/green] Daemon installed via systemd (auto-restart on failure, "
+            "survives logout)."
+        )
+    elif daemon_result == "started":
+        console.print("[green]✓[/green] Daemon started (background).")
+    elif daemon_result == "already_running":
+        console.print("[dim]Daemon was already running.[/dim]")
+    console.print("Run 'tg refresh' to sync, or 'tg today' for today's messages.")
 
 
 @tg_group.command("chats")
@@ -901,3 +934,45 @@ def daemon_stop(as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None)
         console.print("[green]✓[/green] Daemon stopped")
     else:
         console.print(f"[yellow]○ {result.get('reason', 'not running')}[/yellow]")
+
+
+@daemon_group.command("install")
+@click.option("--interval", default=5.0, show_default=True, help="Seconds between queue drains.")
+@structured_output_options
+def daemon_install(interval: float, as_json: bool, as_yaml: bool, as_toon: bool,
+                  fields: str | None):
+    """Install systemd user unit, enable linger, start the daemon at boot.
+
+    Linux only. On macOS/WSL use ``tg daemon start`` and your own supervisor.
+    Idempotent — safe to re-run.
+    """
+    result = daemon_mod.install_systemd(interval=interval)
+    if emit_structured(result, as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
+        return
+    if result.get("installed"):
+        console.print(f"[green]✓[/green] Installed {result['unit']}")
+        if result.get("started"):
+            console.print("[green]✓[/green] Started (will auto-restart on failure)")
+        if result.get("linger_enabled"):
+            console.print("[dim]Linger enabled — daemon survives logout[/dim]")
+        console.print(
+            "[dim]Verify: systemctl --user status tg-cli-daemon.service[/dim]"
+        )
+    else:
+        console.print(
+            f"[yellow]○ Not installed: {result.get('reason')}\n"
+            "  On Linux without systemd user manager, use 'tg daemon start' instead.[/yellow]"
+        )
+
+
+@daemon_group.command("uninstall")
+@structured_output_options
+def daemon_uninstall(as_json: bool, as_yaml: bool, as_toon: bool, fields: str | None):
+    """Stop, disable, and remove the systemd user unit."""
+    result = daemon_mod.uninstall_systemd()
+    if emit_structured(result, as_json=as_json, as_yaml=as_yaml, as_toon=as_toon):
+        return
+    if result.get("uninstalled"):
+        console.print(f"[green]✓[/green] Removed {result['unit']}")
+    else:
+        console.print(f"[yellow]○ {result.get('reason', 'nothing to do')}[/yellow]")

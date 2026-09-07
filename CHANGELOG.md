@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.8.0 - 2026-09-07
+
+### Zero-setup production install
+- **`tg auth` auto-starts the daemon** (interactive auth → daemon up in one step). Honors `--no-auto-start` for scripted setups. Reports the bootstrap branch in the response: `systemd`, `started`, `already_running`, or `failed`.
+- **`tg daemon install`** (Linux) — writes the systemd user unit, enables linger (daemon survives logout), runs `daemon-reload`, enables + starts the service. Idempotent — safe to re-run after `pipx upgrade`.
+- **`tg daemon uninstall`** — stops, disables, and removes the unit cleanly.
+- Fresh installs are now production-ready after one command: `uv tool install kabi-tg-cli && tg auth` produces a daemon that auto-restarts on crash and survives logout.
+
 ## 0.7.0 - 2026-09-07
 
 ### Persistent client + agent-safe queue
