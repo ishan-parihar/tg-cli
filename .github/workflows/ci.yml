@@ -3,18 +3,32 @@ name: CI
 on:
   push:
     tags: ['v*']
+  pull_request:
   workflow_dispatch:
   workflow_call:
+
+# Cancel superseded runs on the same branch/tag so we don't burn CI minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Default to least-privilege. Jobs that need more must opt in explicitly.
+permissions:
+  contents: read
+
 jobs:
   lint-and-test:
     name: Lint and test (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.12", "3.14"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -23,6 +37,8 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Install dependencies
         run: uv sync --group dev
@@ -31,14 +47,17 @@ jobs:
         run: uv run ruff check .
 
       - name: Run tests
-        run: uv run python -m pytest -q
+        run: uv run python -m pytest -q -m "not slow"
 
   build:
     name: Build package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: lint-and-test
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,12 +66,21 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
-      - name: Install dependencies
-        run: uv sync --group dev
+      - name: Install build dependencies
+        run: uv tool install --with twine --with build hatch
 
       - name: Build distribution
-        run: uv build
+        run: uv run --no-project --with build --with twine --with "hatchling>=1.27,<1.29" python -m build
 
       - name: Check distribution metadata
-        run: uv run twine check dist/*
+        run: uv run --no-project --with twine twine check dist/*
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ github.sha }}
+          path: dist/
+          retention-days: 7

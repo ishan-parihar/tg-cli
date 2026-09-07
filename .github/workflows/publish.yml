@@ -6,6 +6,16 @@ on:
     tags:
       - "v*"
 
+# Only one publish at a time. If a new tag lands mid-publish, abort the older
+# one rather than queueing stale versions on PyPI.
+concurrency:
+  group: publish-pypi
+  cancel-in-progress: false
+
+# Least-privilege defaults; the publish job opts in to id-token for OIDC.
+permissions:
+  contents: read
+
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml
@@ -14,12 +24,15 @@ jobs:
     name: Publish to PyPI
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment: pypi
     permissions:
       contents: read
       id-token: write  # Required for Trusted Publisher (OIDC)
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -28,9 +41,26 @@ jobs:
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Verify tag matches pyproject version
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(uv run --no-project --with "hatchling>=1.27,<1.29" \
+            python -c "import tomllib; print(tomllib.loads(open('pyproject.toml').read())['project']['version'])")"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag v$TAG_VERSION does not match pyproject version $PKG_VERSION."
+            exit 1
+          fi
+          echo "Tag v$TAG_VERSION matches pyproject version."
 
       - name: Build package
-        run: uv build
+        run: uv run --no-project --with build --with twine --with "hatchling>=1.27,<1.29" python -m build
+
+      - name: Check distribution metadata
+        run: uv run --no-project --with twine twine check dist/*
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
