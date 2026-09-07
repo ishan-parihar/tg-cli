@@ -120,14 +120,14 @@ uv sync --extra dev
 ## Quick start
 
 ```bash
-# First login (uses Telegram Desktop built-in credentials by default)
-tg chats
+# One command: install + auth + auto-start daemon (production-ready).
+tg auth
 
-# Verify account
+# Verify
 tg status
 tg whoami
 
-# Daily driver: refresh local cache
+# Daily driver: refresh local cache (only needed if the daemon isn't running)
 tg refresh
 
 # Read & search
@@ -135,9 +135,17 @@ tg today
 tg recent --hours 24 --limit 20 --yaml
 tg search "Rust" --hours 48
 tg filter "Rust,Golang,remote" --hours 48 --sync-first --yaml
+```
 
-# Near-real-time cache
-tg listen --persist
+`tg auth` is intentionally a single step: it authenticates your Telegram
+account *and* (on Linux) installs a systemd user unit that auto-starts the
+daemon at boot, auto-restarts on failure, and survives logout. On macOS/WSL,
+it spawns the daemon detached.
+
+**First install on a new box:**
+```bash
+uv tool install kabi-tg-cli    # or: pipx install kabi-tg-cli
+tg auth                        # prompts for phone + code; daemon auto-starts
 ```
 
 > **0.7+ recommendation:** use the daemon instead of `tg listen`. It delivers
@@ -239,10 +247,12 @@ auto-restarts after crashes.
 | `timeline` | Activity over time (day/hour) |
 | `stats` | Per-chat message counts |
 | `export` | Export to text/JSON/YAML/TOON |
+| `auth` | Interactive login — auto-installs the daemon on success |
 | `send` / `edit` / `delete` | Write operations (`--queue` = enqueue when limited) |
 | `listen` | Real-time listener (`--persist` = auto-reconnect) |
 | `queue status` / `queue drain` / `queue clear` | Durable write queue (the agent-safe path) |
 | `daemon status` / `run` / `start` / `stop` | Persistent client: live updates + queue delivery |
+| `daemon install` / `uninstall` | Linux systemd user unit setup (auto-restart, linger) |
 
 All query commands support `--sync-first` to refresh before reading.
 

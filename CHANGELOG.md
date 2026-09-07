@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.8.1 - 2026-09-07
+
+- README "Quick start" rewritten around `tg auth` as the one-step onboarding.
+- Daemon lifecycle commands documented alongside the systemd unit.
+- No code changes.
+
 ## 0.8.0 - 2026-09-07
 
 ### Zero-setup production install
