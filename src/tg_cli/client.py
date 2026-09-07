@@ -18,10 +18,21 @@ from .config import (
     get_api_hash,
     get_api_id,
     get_session_path,
+    get_session_phone,
     is_default_api_id,
 )
 from .console import console
 from .db import MessageDB
+from .ratelimit import (
+    DELETE,
+    DIALOGS,
+    EDIT,
+    HISTORY,
+    SEND,
+    TelegramRateGuard,
+    guarded,
+    peer_key,
+)
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +47,57 @@ _SYSTEM_LANG_CODE = "en-US"
 _FIRST_SYNC_LIMIT = 500
 
 
+def _phone() -> str:
+    """Return the current session's phone number, or a placeholder for the gate.
+
+    The gate keys buckets by phone so per-account state stays separate when more
+    than one CLI process is running.  We don't store the phone in plaintext on
+    disk; Telethon exposes it via get_me() only after auth, so before-auth calls
+    fall back to the session name which is local-only.
+    """
+    try:
+        p = get_session_phone()
+        if p:
+            return p
+    except Exception:
+        pass
+    return "anon"
+
+
+async def _guarded_history(guard: TelegramRateGuard, phone: str, call):
+    """Run a single RPC through the history gate. Returns the result on success.
+
+    FloodWaitError is propagated to the caller; the caller decides whether to
+    record the flood (only meaningful at a boundary that owns a chat scope).
+    """
+    return await guarded(guard, phone, HISTORY, None, call, max_defer=60.0)
+
+
+async def _iter_dialogs_guarded(client, guard, phone):
+    """Yield from iter_dialogs, rate-limited through the dialogs gate.
+
+    Telethon's iter_dialogs is async-generator-shaped; we walk it through the
+    guarded() helper by consuming one dialog at a time and re-checking the gate.
+    """
+    agen = client.iter_dialogs()
+    while True:
+        # Pull the next dialog through the gate.
+        retry = guard.before_call(phone, DIALOGS)
+        if retry > 0:
+            await asyncio.sleep(retry * random.uniform(0.9, 1.1))
+            continue
+        try:
+            dialog = await agen.__anext__()
+        except StopAsyncIteration:
+            return
+        except FloodWaitError as e:
+            guard.record_flood(phone, DIALOGS, e.seconds)
+            await asyncio.sleep(e.seconds + random.uniform(1, 3))
+            continue
+        guard.record_success(phone, DIALOGS)
+        yield dialog
+
+
 def _get_sender_name(sender: User | Channel | Chat | None) -> str | None:
     if sender is None:
         return None
@@ -47,6 +109,15 @@ def _get_sender_name(sender: User | Channel | Chat | None) -> str | None:
 
 
 _default_api_warned = False
+
+
+# Process-wide guard — one per Python process is enough.  Tests can override.
+_default_guard = TelegramRateGuard()
+
+
+def get_rate_guard() -> TelegramRateGuard:
+    """Return the process-wide TelegramRateGuard singleton."""
+    return _default_guard
 
 
 @asynccontextmanager
@@ -197,6 +268,7 @@ async def fetch_history(
     on_progress: Callable[[int], None] | None = None,
     min_id: int = 0,
     batch_delay: float = 0,
+    guard: TelegramRateGuard | None = None,
 ) -> int:
     """Fetch historical messages from a chat and store them in the database.
 
@@ -209,13 +281,19 @@ async def fetch_history(
         min_id: Only fetch messages with id > min_id (for incremental sync)
         batch_delay: Seconds to sleep between DB write batches (with ±30% jitter).
             Throttles iter_messages pagination. Set to 0 to disable.
+        guard: Rate-limit guard (defaults to the process-wide singleton).
     """
     owns_db = db is None
     if db is None:
         db = MessageDB()
+    if guard is None:
+        guard = get_rate_guard()
 
+    phone = _phone()
     try:
-        entity = await client.get_entity(chat)
+        # Resolve the chat once — go through the account-wide history gate so a
+        # flood wait on resolveUsername can never bunch up against iter_messages.
+        entity = await _guarded_history(guard, phone, lambda: client.get_entity(chat))
         chat_name = (
             getattr(entity, "title", None) or getattr(entity, "first_name", None) or str(chat)
         )
@@ -278,6 +356,8 @@ async def fetch_history(
 
         return inserted_count
     except FloodWaitError as e:
+        if 'guard' in locals() and guard is not None:
+            guard.record_flood(phone, HISTORY, e.seconds)
         console.print(f"[yellow]⚠ Telegram rate limit hit, waiting {e.seconds}s...[/yellow]")
         await asyncio.sleep(e.seconds + random.uniform(1, 3))
         return 0
@@ -293,6 +373,7 @@ async def sync_all(
     on_chat_done: Callable[[str, int, int], None] | None = None,
     delay: float = 1.0,
     max_chats: int | None = None,
+    guard: TelegramRateGuard | None = None,
 ) -> dict[str, int]:
     """Sync all chats in the database using a single connection.
 
@@ -301,15 +382,20 @@ async def sync_all(
         delay: Seconds to wait between each chat sync (with ±20% jitter).
             Set to 0 to disable. Helps avoid triggering Telegram rate limits.
         max_chats: Max number of chats to sync per run. None = no limit.
+        guard: Rate-limit guard (defaults to the process-wide singleton).
 
     Returns:
         dict mapping chat_name to new message count
     """
+    if guard is None:
+        guard = get_rate_guard()
+    phone = _phone()
     results: dict[str, int] = {}
     stored_chats = {c["chat_id"]: c for c in db.get_chats()}
     dialog_cache: dict[int, tuple[object, str]] = {}
     try:
-        async for dialog in client.iter_dialogs():
+        # iter_dialogs is the throttled RPC (the #1330 incident). Defer to the gate.
+        async for dialog in _iter_dialogs_guarded(client, guard, phone):
             entity = dialog.entity
             dialog_cache[entity.id] = (entity, dialog.name)
     except Exception as e:
@@ -338,11 +424,13 @@ async def sync_all(
                 limit=effective_limit,
                 db=db,
                 min_id=last_id,
+                guard=guard,
             )
             results[chat_name] = count
             if on_chat_done:
                 on_chat_done(chat_name, count, chat_info.get("msg_count", 0) + count)
         except FloodWaitError as e:
+            guard.record_flood(phone, HISTORY, e.seconds)
             console.print(
                 f"  [yellow]⚠ {chat_name}: rate limited, waiting {e.seconds}s...[/yellow]"
             )
@@ -378,13 +466,21 @@ async def listen(
         @client.on(events.NewMessage(chats=chats))
         async def handler(event):
             msg = event.message
-            chat = await event.get_chat()
-            sender = await event.get_sender()
+            # Use the chat that Telethon already attached to the event — no extra RPC.
+            chat = event.chat
+            # Pull sender name from Telethon's cache; only fall back to get_sender
+            # when the cache is empty (rare, costs one RPC for the miss only).
+            cached_sender = getattr(msg, "_sender", None) or getattr(msg, "sender", None)
+            sender_name = _get_sender_name(cached_sender)
+            if sender_name is None and msg.sender_id:
+                try:
+                    sender_name = _get_sender_name(await event.get_sender())
+                except Exception:
+                    sender_name = None
 
             chat_name = (
                 getattr(chat, "title", None) or getattr(chat, "first_name", None) or "Unknown"
             )
-            sender_name = _get_sender_name(sender)
             content = msg.text or msg.message or ""
 
             ts = msg.date
@@ -420,3 +516,92 @@ async def listen(
     finally:
         if owns_db:
             db.close()
+
+
+# --- guarded write operations ----------------------------------------------
+
+
+async def guarded_send(
+    client: TelegramClient,
+    chat,
+    message: str,
+    *,
+    reply_to: int | None = None,
+    link_preview: bool = True,
+    guard: TelegramRateGuard | None = None,
+):
+    """Send a message through the SEND gate + per-peer limiter.
+
+    Returns the Telethon Message on success.  FloodWaitError is caught, fed to
+    the breaker, retried once after the gate-reported wait, then re-raised.
+    """
+    if guard is None:
+        guard = get_rate_guard()
+    phone = _phone()
+    entity = await _guarded_history(guard, phone, lambda: client.get_entity(chat))
+    peer = peer_key(entity)
+
+    async def _send():
+        return await client.send_message(
+            entity, message, reply_to=reply_to, link_preview=link_preview
+        )
+
+    try:
+        return await guarded(guard, phone, SEND, peer, _send, max_defer=60.0)
+    except FloodWaitError as e:
+        guard.record_flood(phone, SEND, e.seconds)
+        await asyncio.sleep(e.seconds + random.uniform(1, 3))
+        # One retry after the wait — if it fails again, propagate.
+        return await guarded(guard, phone, SEND, peer, _send, max_defer=60.0)
+
+
+async def guarded_edit(
+    client: TelegramClient,
+    chat,
+    msg_id: int,
+    new_text: str,
+    *,
+    link_preview: bool = True,
+    guard: TelegramRateGuard | None = None,
+):
+    """Edit a message through the EDIT gate + per-peer limiter."""
+    if guard is None:
+        guard = get_rate_guard()
+    phone = _phone()
+    entity = await _guarded_history(guard, phone, lambda: client.get_entity(chat))
+    peer = peer_key(entity)
+
+    async def _edit():
+        return await client.edit_message(entity, msg_id, new_text, link_preview=link_preview)
+
+    try:
+        return await guarded(guard, phone, EDIT, peer, _edit, max_defer=60.0)
+    except FloodWaitError as e:
+        guard.record_flood(phone, EDIT, e.seconds)
+        await asyncio.sleep(e.seconds + random.uniform(1, 3))
+        return await guarded(guard, phone, EDIT, peer, _edit, max_defer=60.0)
+
+
+async def guarded_delete(
+    client: TelegramClient,
+    chat,
+    msg_ids: list[int],
+    *,
+    guard: TelegramRateGuard | None = None,
+):
+    """Delete messages through the DELETE gate + per-peer limiter."""
+    if guard is None:
+        guard = get_rate_guard()
+    phone = _phone()
+    entity = await _guarded_history(guard, phone, lambda: client.get_entity(chat))
+    peer = peer_key(entity)
+
+    async def _delete():
+        return await client.delete_messages(entity, msg_ids)
+
+    try:
+        return await guarded(guard, phone, DELETE, peer, _delete, max_defer=60.0)
+    except FloodWaitError as e:
+        guard.record_flood(phone, DELETE, e.seconds)
+        await asyncio.sleep(e.seconds + random.uniform(1, 3))
+        return await guarded(guard, phone, DELETE, peer, _delete, max_defer=60.0)

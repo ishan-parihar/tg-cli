@@ -8,6 +8,24 @@ from datetime import datetime, timezone
 import pytest
 
 from tg_cli.client import fetch_history, sync_all
+from tg_cli.ratelimit import DIALOGS, HISTORY, TelegramRateGuard
+from tg_cli.ratelimit import RateLimitSpec as _Spec
+
+
+@pytest.fixture
+def permissive_guard():
+    """A guard with limits wide enough that tests don't trip them.
+
+    Production defaults are intentionally conservative — tests need a fresh
+    bucket per call.
+    """
+    return TelegramRateGuard(
+        category_limits={
+            DIALOGS: _Spec(max_calls=1000, window_sec=60.0),
+            HISTORY: _Spec(max_calls=1000, window_sec=60.0),
+        },
+        peer_limits={},
+    )
 
 
 @dataclass
@@ -97,7 +115,7 @@ async def test_fetch_history_returns_inserted_count(db):
 
 
 @pytest.mark.asyncio
-async def test_sync_all_discovers_dialogs_from_client(db):
+async def test_sync_all_discovers_dialogs_from_client(db, permissive_guard):
     dialogs = [
         FakeDialog(entity=FakeEntity(id=100, title="Group A"), name="Group A"),
         FakeDialog(entity=FakeEntity(id=200, title="Group B"), name="Group B"),
@@ -110,13 +128,13 @@ async def test_sync_all_discovers_dialogs_from_client(db):
         },
     )
 
-    results = await sync_all(client, db, limit_per_chat=10, delay=0)
+    results = await sync_all(client, db, limit_per_chat=10, delay=0, guard=permissive_guard)
     assert results == {"Group A": 1, "Group B": 1}
     assert db.count() == 2
 
 
 @pytest.mark.asyncio
-async def test_sync_all_max_chats_limits_synced_dialogs(db):
+async def test_sync_all_max_chats_limits_synced_dialogs(db, permissive_guard):
     dialogs = [
         FakeDialog(entity=FakeEntity(id=100, title="Group A"), name="Group A"),
         FakeDialog(entity=FakeEntity(id=200, title="Group B"), name="Group B"),
@@ -131,7 +149,9 @@ async def test_sync_all_max_chats_limits_synced_dialogs(db):
         },
     )
 
-    results = await sync_all(client, db, limit_per_chat=10, delay=0, max_chats=1)
+    results = await sync_all(
+        client, db, limit_per_chat=10, delay=0, max_chats=1, guard=permissive_guard,
+    )
     assert len(results) == 1
     assert db.count() == 1
 

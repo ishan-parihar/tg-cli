@@ -1,0 +1,13 @@
+[Unit]
+Description=tg-cli persistent Telegram client (live updates + queue delivery)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/tg daemon run --interval 5
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

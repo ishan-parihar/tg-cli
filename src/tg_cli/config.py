@@ -83,6 +83,48 @@ def get_session_path() -> str:
     return str(data_dir / name)
 
 
+# Best-effort phone lookup — used as a stable per-account key for the rate gate.
+# The session SQLite file stores it after first auth; we read it lazily so a
+# crash never blocks the CLI on this.  Returns "" when unreadable.
+_SESSION_PHONE_CACHE: str | None = None
+
+
+def get_session_phone() -> str:
+    """Read the phone number from the active Telethon session SQLite, if any.
+
+    Telethon's StringSession encodes this directly, but for file sessions we
+    have to inspect the sqlite table.  Returns "" when not available.
+    """
+    global _SESSION_PHONE_CACHE
+    if _SESSION_PHONE_CACHE is not None:
+        return _SESSION_PHONE_CACHE
+    try:
+        import sqlite3
+        # TelegramClient(session, ...) writes <session>.session — Telethon
+        # appends the suffix, so the base name returned by get_session_path()
+        # needs ".session" appended for direct sqlite access.
+        path = get_session_path() + ".session"
+        if not Path(path).exists():
+            _SESSION_PHONE_CACHE = ""
+            return _SESSION_PHONE_CACHE
+        with sqlite3.connect(path) as conn:
+            row = conn.execute(
+                "SELECT value FROM sessions WHERE key = ?", ("user_id",)
+            ).fetchone()
+            if row:
+                # Telethon stores the user_id; phone is in a separate row.
+                row2 = conn.execute(
+                    "SELECT value FROM sessions WHERE key = ?", ("phone",)
+                ).fetchone()
+                if row2 and isinstance(row2[0], str):
+                    _SESSION_PHONE_CACHE = row2[0]
+                    return _SESSION_PHONE_CACHE
+    except Exception:
+        pass
+    _SESSION_PHONE_CACHE = ""
+    return _SESSION_PHONE_CACHE
+
+
 def get_data_dir() -> Path:
     """Return data directory, create if not exists."""
     raw = os.environ.get("DATA_DIR", "")

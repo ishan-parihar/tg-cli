@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/kabi-tg-cli)](https://pypi.org/project/kabi-tg-cli/)
-![LOC](https://img.shields.io/badge/LOC-4.8K-informational?style=flat-square)
+![LOC](https://img.shields.io/badge/LOC-7.2K-informational?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 ![Language](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
@@ -140,6 +140,86 @@ tg filter "Rust,Golang,remote" --hours 48 --sync-first --yaml
 tg listen --persist
 ```
 
+> **0.7+ recommendation:** use the daemon instead of `tg listen`. It delivers
+> queued writes too, so `tg send "team" "deploy done"` is instant whether you
+> typed it or an agent did. See [Daemon & queue](#daemon--queue).
+
+---
+
+## Daemon & queue (agent-safe writes)
+
+Failures are **soft**: auth, cooldown, and rate-limit problems return
+`{ok: false, ...}` with exit 0 — never a crash. Writes take `--queue` to
+defer instead of failing.
+
+```bash
+# One persistent session — live updates + queue delivery, sole session owner.
+tg daemon start
+# (logs at <data-dir>/daemon.log; supervised by your init: systemd, tmux, docker)
+
+# Writes are instant: the daemon owns the Telegram session, so agents never
+# open a second connection (which would corrupt the session file).
+tg send "Team" "deploy done"
+tg send "Team" "x" --queue      # enqueue when rate-limited instead of failing
+tg refresh --queue             # enqueue when the 2h cooldown is active
+
+# Inspect / manage the queue.
+tg queue status --yaml         # {pending, running, done, failed, oldest_pending_at}
+tg queue clear                 # drop finished jobs (pending kept)
+
+# Lifecycle.
+tg daemon status               # heartbeat freshness + pid
+tg daemon stop
+```
+
+**How it works:**
+
+| Surface | Who opens it | Why |
+|---|---|---|
+| `tg-cli` (agent / cron) | Never the Telegram session file | Only writes to local SQLite + JSONL queue |
+| `tg daemon run` | Only owner of `*.session` | Telethon sessions cannot be shared between processes |
+| `<data-dir>/daemon.json` | heartbeat (pid, started_at, updated_at) | `is_daemon_alive()` check before any agent write |
+| `<data-dir>/queue/jobs.jsonl` | JSONL with `fcntl.flock` advisory lock | Cross-process IPC, atomic writes with `fsync` |
+
+**Queue contract:**
+
+- `send`/`edit`/`delete`/`refresh` enqueue immediately when the daemon is
+  alive (no second session, no `connect()` roundtrip).
+- When the daemon is **not** alive: command runs directly with `connect()`,
+  catching `TelegramRateLimitedError` and returning `{ok: false, code: rate_limited,
+  details: {retry_after_seconds: ...}}` on throttle. With `--queue`, the
+  refused call is enqueued instead of failing.
+- `queue drain` refuses when the daemon is alive (avoid the session collision).
+- Job kinds: `send`, `edit`, `delete`, `refresh`. `MAX_PENDING=100`.
+
+**Error codes returned by the CLI:**
+
+| `error.code` | When | CLI command | Exits |
+|---|---|---|---|
+| `refresh_cooldown` | `refresh` inside 2h | `tg refresh` | 0 |
+| `rate_limited` | Telegram 429 / flood / breaker open | `tg send`/`edit`/`delete`/`refresh` | 0 |
+| `queue_full` | `MAX_PENDING` reached | `tg send --queue` | 0 |
+| `daemon_running` | `queue drain` while daemon alive | `tg queue drain` | 0 |
+| `not_running` | `daemon stop` with no heartbeat | `tg daemon stop` | 0 |
+| `auth_required` | first-run, no session | any write command | 0 |
+
+The full structured envelope (`{ok, schema_version, data|error}`) is documented
+in [SCHEMA.md](./SCHEMA.md).
+
+**systemd unit:**
+
+```bash
+mkdir -p ~/.config/systemd/user
+cp systemd/tg-cli-daemon.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now tg-cli-daemon.service
+systemctl --user status tg-cli-daemon.service
+journalctl --user -u tg-cli-daemon.service -f
+```
+
+The unit runs `tg daemon run --interval 5`, restarts on failure, and
+auto-restarts after crashes.
+
 ---
 
 ## Commands
@@ -159,8 +239,10 @@ tg listen --persist
 | `timeline` | Activity over time (day/hour) |
 | `stats` | Per-chat message counts |
 | `export` | Export to text/JSON/YAML/TOON |
-| `send` / `edit` / `delete` | Write operations |
+| `send` / `edit` / `delete` | Write operations (`--queue` = enqueue when limited) |
 | `listen` | Real-time listener (`--persist` = auto-reconnect) |
+| `queue status` / `queue drain` / `queue clear` | Durable write queue (the agent-safe path) |
+| `daemon status` / `run` / `start` / `stop` | Persistent client: live updates + queue delivery |
 
 All query commands support `--sync-first` to refresh before reading.
 
@@ -218,16 +300,21 @@ systemctl --user enable --now tg-refresh.timer
    ```
    Default `api_id=2040` (Telegram Desktop) is shared and more scrutinized.
 
-2. **Limit sync frequency** — `tg refresh` ≤ 1–2×/day.
+2. **Run the daemon instead of cron `tg refresh`** — a single persistent session
+   looks like Telegram Desktop left open (lowest-suspicion profile). Periodic
+   refresh sweeps are exactly the traffic shape Telegram's heuristics watch for.
 
-3. **Use `--delay` and `--max-chats`**:
+3. **Limit sync frequency** — `tg refresh` ≤ 1–2×/day when used directly.
+
+4. **Use `--delay` and `--max-chats`**:
    ```bash
    tg refresh --delay 3.0 --max-chats 30
    ```
 
-4. **Prefer established accounts** — new/inactive accounts flag easier.
+5. **Prefer established accounts** — new/inactive accounts flag easier.
 
-5. **Prefer read operations** — `tg send` carries higher risk.
+6. **Prefer read operations** — `tg send` carries higher risk. Use `--queue` to
+   defer when the rate limit / breaker is open.
 
 ---
 

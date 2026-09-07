@@ -42,6 +42,40 @@ error:
 | `status` | dict: `{authenticated, user: {id, name, username, phone}}` |
 | `whoami` | dict: `{user: {id, name, username, phone}}` |
 | `history` / `sync` / `sync-all` / `refresh` / `send` / `edit` / `delete` | small result dicts (`stored`, `synced`, `new_messages`, `sent`, …) |
+| `queue status` | `{pending, running, done, failed, total, oldest_pending_at}` |
+| `queue drain` | `{done, failed, deferred}` |
+| `queue clear` | `{cleared}` |
+| `daemon status` | `{alive, heartbeat: {pid, started_at, updated_at} \| null}` |
+| `daemon start` | `{started, pid?, log?, reason?}` |
+| `daemon stop` | `{stopped, pid?, reason?}` |
+
+### Queue / daemon payloads
+
+When `--queue` enqueues a write, the response is:
+
+```yaml
+ok: true
+schema_version: "1"
+data:
+  queued: true
+  kind: send          # send | edit | delete | refresh
+  job_id: a1b2c3d4e5f6
+  eta_seconds: 0
+```
+
+## Error codes (v0.7+)
+
+Every CLI command now exits 0 even on failure; the agent reads the envelope.
+
+| `error.code` | Command(s) | When | `details` |
+|---|---|---|---|
+| `auth_required` | any write command | no session, first run | — |
+| `chat_not_found` | `info`, `history`, etc. | chat identifier not in local cache | — |
+| `refresh_cooldown` | `refresh` | ran inside the 2-hour cooldown | `{retry_after_seconds}` |
+| `rate_limited` | `send`/`edit`/`delete`/`refresh` | Telegram 429, flood, breaker open | `{retry_after_seconds, phone?, category?}` |
+| `queue_full` | `send --queue` etc. | 100 pending jobs queued | — |
+| `daemon_running` | `queue drain` | daemon heartbeat is fresh | — |
+| `not_running` | `daemon stop` | no heartbeat on disk | — |
 
 ## Field filtering
 

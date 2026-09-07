@@ -245,7 +245,11 @@ class TestTodayHints:
 
 
 class TestRefreshAndSyncFirst:
-    def test_refresh_yaml(self, runner, monkeypatch):
+    def test_refresh_yaml(self, runner, monkeypatch, tmp_path):
+        # Use a per-test DATA_DIR so the per-session cooldown file does not
+        # leak between runs (and doesn't inherit a stale timestamp from manual
+        # invocations).
+        monkeypatch.setenv("DATA_DIR", str(tmp_path))
         import tg_cli.cli.tg as tg_mod
 
         async def fake_sync_all_dialogs(*, limit, on_chat_done=None, delay=1.0, max_chats=None):
@@ -535,9 +539,15 @@ class TestSend:
         class FakeMsg:
             id = 42
 
+        class FakeEntity:
+            id = 1
+
         class FakeClient:
+            async def get_entity(self, chat):
+                return FakeEntity()
+
             async def send_message(self, chat, message, reply_to=None, **kwargs):
-                assert chat == "TestChat"
+                assert chat.id == 1
                 assert message == "Hello!"
                 assert reply_to is None
                 return FakeMsg()
@@ -558,7 +568,13 @@ class TestSend:
         class FakeMsg:
             id = 99
 
+        class FakeEntity:
+            id = 1
+
         class FakeClient:
+            async def get_entity(self, chat):
+                return FakeEntity()
+
             async def send_message(self, chat, message, reply_to=None, **kwargs):
                 assert reply_to == 12345
                 return FakeMsg()
@@ -577,7 +593,13 @@ class TestSend:
         class FakeMsg:
             id = 77
 
+        class FakeEntity:
+            id = 1
+
         class FakeClient:
+            async def get_entity(self, chat):
+                return FakeEntity()
+
             async def send_message(self, chat, message, reply_to=None, **kwargs):
                 return FakeMsg()
 
@@ -599,7 +621,13 @@ class TestSend:
         class FakeMsg:
             id = 88
 
+        class FakeEntity:
+            id = 1
+
         class FakeClient:
+            async def get_entity(self, chat):
+                return FakeEntity()
+
             async def send_message(self, chat, message, reply_to=None, **kwargs):
                 return FakeMsg()
 
@@ -619,9 +647,15 @@ class TestSend:
         class FakeMsg:
             id = 55
 
+        class FakeEntity:
+            id = 12345
+
         class FakeClient:
+            async def get_entity(self, chat):
+                return FakeEntity()
+
             async def send_message(self, chat, message, reply_to=None, **kwargs):
-                assert chat == 12345  # Should be parsed as int
+                assert chat.id == 12345  # Should be parsed as int
                 return FakeMsg()
 
         @asynccontextmanager

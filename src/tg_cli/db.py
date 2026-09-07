@@ -60,9 +60,11 @@ class MessageDB:
         else:
             self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(str(self.db_path))
+        self.conn = sqlite3.connect(str(self.db_path), timeout=10.0)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        # Daemon writes while CLI commands read — wait instead of failing fast.
+        self.conn.execute("PRAGMA busy_timeout=5000")
         self.conn.executescript(_CREATE_TABLE + _CREATE_INDEX)
 
     def __enter__(self):
@@ -360,6 +362,32 @@ class MessageDB:
         else:
             row = self.conn.execute("SELECT MAX(timestamp) FROM messages").fetchone()
         return row[0] if row and row[0] is not None else None
+
+    def update_message(self, chat_id: int, msg_id: int, content: str | None) -> bool:
+        """Update a message's content (daemon edit handler). Returns True if found."""
+        try:
+            cursor = self.conn.execute(
+                "UPDATE messages SET content = ? WHERE chat_id = ? AND msg_id = ?",
+                (content, chat_id, msg_id),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            log.debug("update_message failed: %s", e)
+            return False
+
+    def delete_message(self, chat_id: int, msg_id: int) -> bool:
+        """Delete one message (daemon delete handler). Returns True if found."""
+        try:
+            cursor = self.conn.execute(
+                "DELETE FROM messages WHERE chat_id = ? AND msg_id = ?",
+                (chat_id, msg_id),
+            )
+            self.conn.commit()
+            return cursor.rowcount > 0
+        except sqlite3.Error as e:
+            log.debug("delete_message failed: %s", e)
+            return False
 
     def delete_chat(self, chat_id: int) -> int:
         """Delete all messages for a chat. Returns number of deleted rows."""

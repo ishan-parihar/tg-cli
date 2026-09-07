@@ -342,3 +342,20 @@ class TestGetToday:
         db.insert_message(**make_msg(chat_id=200, msg_id=2, hours_ago=1))
         results = db.get_today(chat_id=100)
         assert len(results) == 1
+
+
+# ─────────────────────── daemon edit/delete handlers ───────────────────────
+
+
+class TestDaemonWrites:
+    def test_update_message(self, db):
+        db.insert_message(**make_msg(chat_id=100, msg_id=1, content="v1"))
+        assert db.update_message(100, 1, "v2") is True
+        assert db.search("v2", chat_id=100)
+        assert db.update_message(100, 999, "v3") is False
+
+    def test_delete_message(self, db):
+        db.insert_message(**make_msg(chat_id=100, msg_id=1))
+        assert db.delete_message(100, 1) is True
+        assert db.count(100) == 0
+        assert db.delete_message(100, 1) is False

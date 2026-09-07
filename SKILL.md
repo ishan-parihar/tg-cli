@@ -1,14 +1,16 @@
 ---
 name: tg-cli
-description: CLI skill for Telegram to sync chats, search messages, filter keywords, and monitor groups from the terminal
+description: CLI skill for Telegram to sync chats, search messages, filter keywords, send messages, and run a persistent client daemon with agent-safe queueing
 author: jackwener
-version: "0.5.4"
+version: "0.7.0"
 tags:
   - telegram
   - tg
   - chat
   - monitor
   - cli
+  - daemon
+  - queue
 ---
 
 # tg-cli Skill
@@ -55,10 +57,51 @@ tg history CHAT -n 1000           # Fetch historical messages
 tg sync CHAT                      # Incremental sync (only new)
 tg sync-all                       # Low-level sync for all current dialogs
 tg refresh                        # Recommended daily refresh entrypoint
+tg refresh --queue                # Enqueue when 2h cooldown active
 tg listen                         # Real-time listener
 tg listen --persist               # Reconnect automatically for a near-live cache
+
+# Persistent client (recommended for agents — handles writes too)
+tg daemon start                   # Foreground/backgroundd daemon
+tg daemon status                  # Heartbeat check
+tg daemon stop                     # Stop SIGTERM the daemon
+tg queue status --yaml            # {pending, running, done, failed, total, oldest_pending_at}
 tg info CHAT                      # Chat details
 tg send CHAT "Hello!"             # Send a message
+tg send CHAT "Hi" --queue         # Enqueue when rate-limited instead of failing
+```
+
+### Agent-safe writes (0.7+)
+
+**All commands exit 0 even on failure.** The envelope tells the agent what
+happened. See [SCHEMA.md](./SCHEMA.md) for the full schema; key error codes:
+
+| `error.code` | When | `details` |
+|---|---|---|
+| `auth_required` | First run, no session | — |
+| `refresh_cooldown` | Refresh inside 2h cooldown | `{retry_after_seconds}` |
+| `rate_limited` | Telegram 429 / flood / breaker open | `{retry_after_seconds}` |
+| `queue_full` | 100 pending jobs queued | — |
+| `daemon_running` | `queue drain` while daemon alive | — |
+| `not_running` | `daemon stop` with no heartbeat | — |
+
+**Recommended workflow for agents:**
+
+```bash
+# One-time: start the daemon so writes always enqueue cleanly.
+tg daemon start
+# (logs at <data-dir>/daemon.log)
+
+# Writes are instant: agent calls `tg send` → daemon's connection delivers.
+# When the daemon is alive, agents never connect to Telegram themselves.
+tg send "Team" "deploy done" --yaml   # or just `tg send "Team" "deploy done"`
+
+# If the daemon dies or wasn't started, --queue defers writes.
+tg send "Team" "x" --queue
+tg refresh --queue
+
+# Inspect.
+tg queue status --yaml
 ```
 
 ### Search & Query
@@ -124,8 +167,11 @@ tg filter "Rust,Golang" --hours 24 --sync-first --yaml
 tg search "招聘" -n 100 --yaml > jobs.yaml
 tg filter "远程,remote,Web3" --hours 72 --yaml > filtered.yaml
 
-# Send messages
+# Send messages (with daemon up, these are instant + agent-safe)
 tg send "GroupName" "Hello from CLI!"
+
+# Daemon is offline: --queue defers until you start one.
+tg send "GroupName" "Hello" --queue
 ```
 
 ## Debugging
@@ -138,10 +184,12 @@ tg -v stats          # See SQL queries and timing
 
 ## Error Handling
 
-- Commands exit with code 0 on success, non-zero on failure
-- Error messages are prefixed with ✗ or shown in red
+- **All commands exit 0** (success and failure). Agents read the envelope.
+- Structured errors use the schema in [SCHEMA.md](./SCHEMA.md).
 - Chat names are fuzzy-matched (partial name works)
 - `refresh` and `sync-all` gracefully skip chats that can't be found
+- Soft-fail codes: `auth_required`, `refresh_cooldown`, `rate_limited`, `queue_full`,
+  `daemon_running`, `not_running` — all return `{ok: false}` + exit 0
 
 ## Scheduling
 
