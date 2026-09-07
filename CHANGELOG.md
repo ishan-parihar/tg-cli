@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.8.2 - 2026-09-07
+
+- Hardened `ci.yml` and `publish.yml`: concurrency groups, top-level least-privilege
+  permissions, timeouts on every job, pull_request trigger, uv cache, PEP 517 build
+  via `uv run --no-project python -m build`, dist artifact upload, tag-vs-pyproject
+  version verification before publish, twine check pre-publish.
+- 35 new workflow tests in `tests/test_workflows.py` that exercise the actual build
+  pipeline and validate every workflow contract.
+
 ## 0.8.1 - 2026-09-07
 
 - README "Quick start" rewritten around `tg auth` as the one-step onboarding.

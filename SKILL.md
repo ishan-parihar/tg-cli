@@ -2,7 +2,7 @@
 name: tg-cli
 description: CLI skill for Telegram to sync chats, search messages, filter keywords, send messages, and run a persistent client daemon with agent-safe queueing
 author: jackwener
-version: "0.8.1"
+version: "0.8.2"
 tags:
   - telegram
   - tg
