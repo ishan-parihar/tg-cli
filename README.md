@@ -151,7 +151,7 @@ tg auth                        # prompts for phone + code; daemon auto-starts
 
 > **0.7+ recommendation:** use the daemon instead of `tg listen`. It delivers
 > queued writes too, so `tg send "team" "deploy done"` is instant whether you
-> typed it or an agent did. See [Daemon & queue](#daemon--queue).
+> typed it or an agent did. See [Daemon & queue](#daemon--queue-agent-safe-writes).
 
 ---
 
