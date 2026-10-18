@@ -298,5 +298,13 @@ async def on_chat_end():
     console.print("\n[dim]Restart your agent session to activate hooks.[/dim]")
 
 
+@cli.command("donate")
+def donate():
+    """Support development 💜"""
+    print("Star the repo  : https://github.com/ishan-parihar/tg-cli")
+    print("GitHub Sponsors: https://github.com/sponsors/ishan-parihar")
+    print("Razorpay (UPI) : https://rzp.io/rzp/ishan-parihar")
+
+
 if __name__ == "__main__":
     cli()
