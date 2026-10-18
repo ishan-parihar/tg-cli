@@ -28,3 +28,5 @@ data/
 *.genome-lock
 *.genome-tmp
 .genome/
+.ruff_cache/
+.tmp_gh/
