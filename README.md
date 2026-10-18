@@ -4,8 +4,6 @@
 
 [![CI](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/kabi-tg-cli)](https://pypi.org/project/kabi-tg-cli/)
-![LOC](https://img.shields.io/badge/LOC-7.2K-informational?style=flat-square)
-![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 ![Language](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/pypi/v/kabi-tg-cli?label=version)](https://pypi.org/project/kabi-tg-cli/)
@@ -86,6 +84,9 @@ Mechanism: local-first. Queries hit SQLite by default. `tg refresh` (or `--sync-
 ## Install
 
 ```bash
+# One-liner (bootstraps uv if missing)
+curl -fsSL https://raw.githubusercontent.com/ishan-parihar/tg-cli/main/install.sh | bash
+
 # Recommended: uv tool (isolated, fast, auto-updates)
 uv tool install kabi-tg-cli
 
