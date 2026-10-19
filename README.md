@@ -213,7 +213,7 @@ tg daemon stop
 | `auth_required` | first-run, no session | any write command | 0 |
 
 The full structured envelope (`{ok, schema_version, data|error}`) is documented
-in [SCHEMA.md](./SCHEMA.md).
+in [SCHEMA.md](docs/SCHEMA.md).
 
 **systemd unit:**
 
@@ -269,7 +269,7 @@ All query commands support `--sync-first` to refresh before reading.
 | `--fields id,timestamp,content` | Minimal schema (3-4 cols) |
 | `--full` | Disable content truncation (default: 500 chars) |
 
-Structured output contract: [SCHEMA.md](./SCHEMA.md)
+Structured output contract: [SCHEMA.md](docs/SCHEMA.md)
 
 **Agent workflow:**
 

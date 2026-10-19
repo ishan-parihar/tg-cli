@@ -74,7 +74,7 @@ tg send CHAT "Hi" --queue         # Enqueue when rate-limited instead of failing
 ### Agent-safe writes (0.7+)
 
 **All commands exit 0 even on failure.** The envelope tells the agent what
-happened. See [SCHEMA.md](./SCHEMA.md) for the full schema; key error codes:
+happened. See [SCHEMA.md](docs/SCHEMA.md) for the full schema; key error codes:
 
 | `error.code` | When | `details` |
 |---|---|---|
@@ -144,7 +144,7 @@ tg filter "招聘" --hours 48 --yaml
 
 When stdout is not a TTY, `tg-cli` defaults to YAML automatically.
 Use `OUTPUT=yaml|json|rich|auto` to override the default output mode.
-All machine-readable output uses the envelope documented in [SCHEMA.md](./SCHEMA.md).
+All machine-readable output uses the envelope documented in [SCHEMA.md](docs/SCHEMA.md).
 
 ## Refresh Model
 
@@ -185,7 +185,7 @@ tg -v stats          # See SQL queries and timing
 ## Error Handling
 
 - **All commands exit 0** (success and failure). Agents read the envelope.
-- Structured errors use the schema in [SCHEMA.md](./SCHEMA.md).
+- Structured errors use the schema in [SCHEMA.md](docs/SCHEMA.md).
 - Chat names are fuzzy-matched (partial name works)
 - `refresh` and `sync-all` gracefully skip chats that can't be found
 - Soft-fail codes: `auth_required`, `refresh_cooldown`, `rate_limited`, `queue_full`,
