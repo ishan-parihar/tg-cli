@@ -28,7 +28,8 @@ Every document in `docs/` is listed with the question it answers in [docs/PAGE-I
 **First successful action:**
 
 ```bash
-tg refresh           # sync all chats to local DB tg today --yaml      # see today's messages
+tg refresh           # sync all chats to local DB
+tg today --yaml      # see today's messages
 ```
 
 ---
@@ -36,14 +37,28 @@ tg refresh           # sync all chats to local DB tg today --yaml      # see tod
 ## Proof
 
 ```
-$ tg today --yaml chats:
+$ tg today --yaml
+chats:
   "Rust Programming":
-    - chat_name: "Rust Programming" msg_count: 47 messages:
-        - id: 18923 timestamp: "2025-07-29T14:32:11+00:00" sender_name: "Alex" content: "New async RFC merged! 🎉"
-        - id: 18924 timestamp: "2025-07-29T14:35:44+00:00" sender_name: "Sam" content: "Great, now we can..."
+    - chat_name: "Rust Programming"
+      msg_count: 47
+      messages:
+        - id: 18923
+          timestamp: "2025-07-29T14:32:11+00:00"
+          sender_name: "Alex"
+          content: "New async RFC merged! 🎉"
+        - id: 18924
+          timestamp: "2025-07-29T14:35:44+00:00"
+          sender_name: "Sam"
+          content: "Great, now we can..."
   "Team Standup":
-    - chat_name: "Team Standup" msg_count: 12 messages:
-        - id: 9012 timestamp: "2025-07-29T09:00:00+00:00" sender_name: "Bot" content: "Daily standup: 10am UTC"
+    - chat_name: "Team Standup"
+      msg_count: 12
+      messages:
+        - id: 9012
+          timestamp: "2025-07-29T09:00:00+00:00"
+          sender_name: "Bot"
+          content: "Daily standup: 10am UTC"
 ```
 
 ---
@@ -72,7 +87,8 @@ curl -fsSL https://raw.githubusercontent.com/ishan-parihar/tg-cli/main/install.s
 uv tool install kabi-tg-cli
 
 # Or: pipx / pip
-pipx install kabi-tg-cli pip install kabi-tg-cli
+pipx install kabi-tg-cli
+pip install kabi-tg-cli
 ```
 
 Upgrade:
@@ -91,7 +107,9 @@ uv tool install git+https://github.com/ishan-parihar/tg-cli.git
 From source:
 
 ```bash
-git clone https://github.com/ishan-parihar/tg-cli.git cd tg-cli uv sync --extra dev
+git clone https://github.com/ishan-parihar/tg-cli.git
+cd tg-cli
+uv sync --extra dev
 ```
 
 ---
@@ -103,20 +121,25 @@ git clone https://github.com/ishan-parihar/tg-cli.git cd tg-cli uv sync --extra 
 tg auth
 
 # Verify
-tg status tg whoami
+tg status
+tg whoami
 
 # Daily driver: refresh local cache (only needed if the daemon isn't running)
 tg refresh
 
 # Read & search
-tg today tg recent --hours 24 --limit 20 --yaml tg search "Rust" --hours 48 tg filter "Rust,Golang,remote" --hours 48 --sync-first --yaml
+tg today
+tg recent --hours 24 --limit 20 --yaml
+tg search "Rust" --hours 48
+tg filter "Rust,Golang,remote" --hours 48 --sync-first --yaml
 ```
 
 `tg auth` is intentionally a single step: it authenticates your Telegram account *and* (on Linux) installs a systemd user unit that auto-starts the daemon at boot, auto-restarts on failure, and survives logout. On macOS/WSL, it spawns the daemon detached.
 
 **First install on a new box:**
 ```bash
-uv tool install kabi-tg-cli    # or: pipx install kabi-tg-cli tg auth                        # prompts for phone + code; daemon auto-starts
+uv tool install kabi-tg-cli    # or: pipx install kabi-tg-cli
+tg auth                        # prompts for phone + code; daemon auto-starts
 ```
 
 > **0.7+ recommendation:** use the daemon instead of `tg listen`. It delivers > queued writes too, so `tg send "team" "deploy done"` is instant whether you > typed it or an agent did. See [Daemon & queue](#daemon--queue-agent-safe-writes).
@@ -134,13 +157,17 @@ tg daemon start
 
 # Writes are instant: the daemon owns the Telegram session, so agents never
 # open a second connection (which would corrupt the session file).
-tg send "Team" "deploy done" tg send "Team" "x" --queue      # enqueue when rate-limited instead of failing tg refresh --queue             # enqueue when the 2h cooldown is active
+tg send "Team" "deploy done"
+tg send "Team" "x" --queue      # enqueue when rate-limited instead of failing
+tg refresh --queue             # enqueue when the 2h cooldown is active
 
 # Inspect / manage the queue.
-tg queue status --yaml         # {pending, running, done, failed, oldest_pending_at} tg queue clear                 # drop finished jobs (pending kept)
+tg queue status --yaml         # {pending, running, done, failed, oldest_pending_at}
+tg queue clear                 # drop finished jobs (pending kept)
 
 # Lifecycle.
-tg daemon status               # heartbeat freshness + pid tg daemon stop
+tg daemon status               # heartbeat freshness + pid
+tg daemon stop
 ```
 
 **How it works:**
@@ -171,8 +198,12 @@ tg daemon status               # heartbeat freshness + pid tg daemon stop
 The full structured envelope (`{ok, schema_version, data|error}`) is documented **systemd unit:**
 
 ```bash
-mkdir -p ~/.config/systemd/user cp systemd/tg-cli-daemon.service ~/.config/systemd/user/ systemctl --user daemon-reload systemctl --user enable --now tg-cli-daemon.service
-systemctl --user status tg-cli-daemon.service journalctl --user -u tg-cli-daemon.service -f
+mkdir -p ~/.config/systemd/user
+cp systemd/tg-cli-daemon.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now tg-cli-daemon.service
+systemctl --user status tg-cli-daemon.service
+journalctl --user -u tg-cli-daemon.service -f
 ```
 
 The unit runs `tg daemon run --interval 5`, restarts on failure, and auto-restarts after crashes.
@@ -220,7 +251,10 @@ All query commands support `--sync-first` to refresh before reading.
 Structured output contract: [SCHEMA.md](docs/SCHEMA.md) **Agent workflow:**
 
 ```bash
-tg refresh --yaml tg chats --yaml tg recent --hours 24 --sync-first --yaml tg search "keyword" --chat "GroupName" --sync-first --yaml
+tg refresh --yaml
+tg chats --yaml
+tg recent --hours 24 --sync-first --yaml
+tg search "keyword" --chat "GroupName" --sync-first --yaml
 ```
 
 ---
@@ -234,7 +268,10 @@ See [examples/tg-refresh.cron](./examples/tg-refresh.cron)
 ### systemd user timer
 
 ```bash
-mkdir -p ~/.config/systemd/user cp examples/systemd/tg-refresh.service ~/.config/systemd/user/ cp examples/systemd/tg-refresh.timer ~/.config/systemd/user/ systemctl --user daemon-reload
+mkdir -p ~/.config/systemd/user
+cp examples/systemd/tg-refresh.service ~/.config/systemd/user/
+cp examples/systemd/tg-refresh.timer ~/.config/systemd/user/
+systemctl --user daemon-reload
 systemctl --user enable --now tg-refresh.timer
 ```
 
@@ -246,7 +283,8 @@ systemctl --user enable --now tg-refresh.timer
 
 1. **Use your own API credentials** — create at [my.telegram.org](https://my.telegram.org):
    ```bash
-   export TG_API_ID=12345678 export TG_API_HASH="your_hash_here"
+   export TG_API_ID=12345678
+   export TG_API_HASH="your_hash_here"
    ```
    Default `api_id=2040` (Telegram Desktop) is shared and more scrutinized.
 
