@@ -8,6 +8,7 @@ cd tg-cli
 uv sync --extra dev
 ```
 
+*(Commands reviewed 2026-10-19: the section above still holds the commands that build and test this repo.)*
 ## Local Checks
 
 ```bash
