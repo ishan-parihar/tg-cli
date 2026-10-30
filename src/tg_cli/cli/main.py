@@ -163,6 +163,18 @@ for group in (tg_group, query_group, data_group):
         cli.add_command(cmd, name)
 
 
+@cli.command("update")
+@click.option("--check", is_flag=True, help="Check for an update without installing")
+@click.option("--json", "as_json", is_flag=True, help="Print the result as JSON")
+def update_command(check: bool, as_json: bool) -> None:
+    """Update tg using the package manager that owns this installation."""
+    from ..updater import run_update
+
+    args = [*( ["--check"] if check else []), *( ["--json"] if as_json else [])]
+    raise click.exceptions.Exit(
+        run_update(args, application="tg-cli", package="kabi-tg-cli")
+    )
+cli.add_command(update_command, "upgrade")
 @cli.command()
 @click.option("--claude", is_flag=True, help="Install Claude Code hook (~/.claude/settings.json)")
 @click.option("--codex", is_flag=True, help="Install Codex hook (~/.codex/hooks.json)")

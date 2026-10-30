@@ -94,9 +94,15 @@ pip install kabi-tg-cli
 Upgrade:
 
 ```bash
+tg update --check
+tg update
+# `tg upgrade` is an alias for `tg update`
 uv tool upgrade kabi-tg-cli
 # or: pipx upgrade kabi-tg-cli
 ```
+
+The CLI delegates to the detected `uv`, `pipx`, or virtual-environment `pip`
+installation. It refuses to modify an editable or unrecognized installation.
 
 From GitHub (latest main):
 
