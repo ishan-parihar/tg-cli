@@ -54,7 +54,7 @@ except ImportError:  # Windows: Guarded falls back to an exclusive-create lock f
 # ---------------------------------------------------------------- constants
 
 JSON_CMDS = {"ask", "lint", "doctor", "new", "show", "find", "graph", "place", "card", "impact"}  # commands with a --json form
-MODULES = ("core", "records", "research", "ops", "agents")
+MODULES = ("core", "records", "research", "ops", "agents", "outline")
 PROFILES = {
     "software": ["core", "records"],
     "research": ["core", "records", "research", "ops"],
@@ -108,6 +108,7 @@ MODULE_ROLES = {
     "research": ["evidence", "hypotheses", "quarantine", "prereg"],
     "ops": ["ownership_map"],
     "agents": ["feed", "workflows"],
+    "outline": ["agents"],
 }
 APPEND_ONLY = ("ledger", "worklog", "feed", "prereg", "quarantine")
 TOMBSTONE = re.compile(r"<!--\s*kb: tombstone target=\"([^\"]+)\"")
@@ -116,7 +117,7 @@ ERR = 2
 MIN_CHUNK = 5  # lines; `ask` hits narrower than this point at a lead line without its content
 HUB_NODE_CAP = 3000  # nodes; above this `graph hubs` ranks by degree and says betweenness was not computed
 _TMP_SEQ = itertools.count()  # makes each atomic_write temp name unique within this process too
-VERSION = "2026.10.22-17"
+VERSION = "2026.10.27-13"
 # every key genome reads: an unknown key is a typo that would silently switch a check off (E017)
 CONFIG_KEYS = {
     "genome": {"modules", "schema_version"},
@@ -128,10 +129,11 @@ CONFIG_KEYS = {
              "emitters", "gate", "living_plans", "never_commit", "pointer_ignore", "resume", "resume_heading",
              "resume_lines", "toc_lines", "wake_lines", "worklog_form", "worklog_index", "worklog_width"},
     "records": {"archive", "mode", "prefix", "recon_hours", "width", "zones", "required", "governed_by"},
-    "research": {"classes", "figure_pattern", "hyp_prefix", "hyp_statuses", "surfaces"},
+    "research": {"classes", "figure_pattern", "hyp_prefix", "hyp_statuses", "surfaces", "quarantine_surfaces"},
     "ops": {"bulk_allow", "bulk_globs", "code_globs", "code_roots", "jobs", "link_prefixes", "link_surfaces",
             "max_bytes", "owner_exempt", "owner_globs", "py_paths", "secrets", "root_files", "dir_suffixes",
             "dir_requires", "stale_terms", "stale_exempt", "external_ok"},
+    "outline": {"zones"},
 }
 STALE_DOCS = ("*.md", "*.yaml", "*.yml", "*.toml", "*.txt", "*.rst")  # stale paths matter where people read
 # The root files an ordinary software repo carries, and that no role points at.
@@ -619,6 +621,222 @@ def md_sections(text: str, top: str, maxlevel: int = 4) -> list[tuple[str, int, 
     return out
 
 
+# ---------------------------------------------------------------- outline
+
+# The stack outline: facts derived from the tree, written into a generated zone in
+# `AGENTS.md`, with the prose owned by a hand-written `docs/OUTLINE.md`.
+#
+# WHY IT IS A MODULE OF ITS OWN AND NOT SIX MORE FILES IN CORE. A records-only
+# knowledge base is not forced to carry a stack table it will never refresh; the
+# zone is registered like every other zone, and `genome lint` fails it when stale
+# by the same E104 rule the records zones use. No new mechanism.
+#
+# THE ONE RULE: every row is derived, and a fact with no source is printed as
+# "not derivable" rather than guessed. This is not fastidiousness. The sentence
+# this module exists to prevent was "the interaction-surfaces family is all
+# Python", written about a family whose largest member is Rust; nothing in the
+# pipeline was positioned to notice, because the claim was asserted in prose by
+# something that had read a directory listing. Read the manifest, never the name.
+
+OUTLINE_ZONE = "stack"
+OUTLINE_MANIFESTS = (("Cargo.toml", "rust"), ("pyproject.toml", "python"),
+                     ("package.json", "javascript"), ("go.mod", "go"))
+# Never a source tree: build output, vendored code, data. A count that includes
+# them is a number the repository cannot reproduce from a clean clone.
+OUTLINE_NOT_SRC = {"node_modules", "dist", "build", "target", "vendor", "uploads",
+                   "probe-out", "samples", "assets", ".git", "__pycache__"}
+OUTLINE_EXTS = {".rs": "rust", ".py": "python", ".go": "go",
+                ".ts": "typescript", ".tsx": "typescript", ".js": "javascript"}
+
+
+def o_lang(root: Path) -> tuple[str, str]:
+    p = next((f for f, _ in OUTLINE_MANIFESTS if (root / f).is_file()), None)
+    if not p:
+        return "not derivable", "no manifest (Cargo.toml / pyproject.toml / package.json / go.mod)"
+    lang = dict(OUTLINE_MANIFESTS)[p]
+    # A package.json cannot say TypeScript from JavaScript, and that guess is the
+    # same failure as the language guess above. tsconfig.json is the discriminator.
+    if p == "package.json" and (root / "tsconfig.json").is_file():
+        return "typescript", "package.json + tsconfig.json"
+    return lang, p
+
+
+def o_src(root: Path) -> tuple[list[str], str]:
+    """(source dirs, entry point). The declared package wins over a conventional name:
+    meesho-lyr's package is `meesho_cli/`, and probing only `src/` would report a
+    2,000-file Python project as having no source at all."""
+    out: list[str] = []
+    pyp = root / "pyproject.toml"
+    if pyp.is_file():
+        t = read(pyp)
+        for m in re.finditer(r'include\s*=\s*\[([^\]]*)\]|^\s*packages\s*=\s*\[([^\]]*)\]', t, re.M | re.S):
+            for c in re.findall(r'"([^"]+)"', m.group(1) or m.group(2) or ""):
+                d = c.rstrip("*").replace(".", "/")
+                if (root / d).is_dir() and d not in out:
+                    out.append(d)
+        n = re.search(r'^name\s*=\s*"([^"]+)"', t, re.M)  # usually named after its package
+        if n and (root / n.group(1).replace("-", "_")).is_dir():
+            d = n.group(1).replace("-", "_")
+            if d not in out:
+                out.append(d)
+    cargo = root / "Cargo.toml"
+    if cargo.is_file():
+        n = re.search(r'^\s*(?:name|path)\s*=\s*"([^"]+)"', read(cargo), re.M)
+        if n and (root / n.group(1)).is_dir() and n.group(1) not in out:
+            out.append(n.group(1))
+    pj = root / "package.json"
+    if pj.is_file():
+        m = re.search(r'"(?:main|bin)"\s*:\s*"([^"]+)"', read(pj))
+        if m and "/" in m.group(1):
+            d = m.group(1).rsplit("/", 1)[0]
+            if (root / d).is_dir() and d not in OUTLINE_NOT_SRC and d not in out:
+                out.append(d)
+    for d in ("src", "lib", "crates", "cmd", "skills"):  # conventional, never instead of
+        if (root / d).is_dir() and d not in OUTLINE_NOT_SRC and d not in out:
+            out.append(d)
+    entry = next((f"{d}/{c}" for d in out for c in ("__init__.py", "lib.rs", "main.rs", "index.ts", "mod.rs")
+                  if (root / d / c).is_file()), "")
+    return out, entry
+
+
+def o_size(root: Path, src: list[str]) -> list[tuple[str, int]]:
+    n: dict[str, int] = {}
+    for d in src:
+        for p in (root / d).rglob("*"):
+            if p.is_file() and not any(x in OUTLINE_NOT_SRC for x in p.parts) and p.suffix in OUTLINE_EXTS:
+                n[OUTLINE_EXTS[p.suffix]] = n.get(OUTLINE_EXTS[p.suffix], 0) + 1
+    return sorted(n.items(), key=lambda kv: -kv[1])
+
+
+def o_gate(root: Path) -> str:
+    m = re.search(r'^\s*gate\s*=\s*"([^"]+)"', read(root / "genome.toml"), re.M)  # the KB's own setting first
+    if m:
+        return m.group(1)
+    return next((g for f, g in (("Cargo.toml", "cargo test --locked"), ("pyproject.toml", "pytest -q"),
+                                ("package.json", "npm test"), ("go.mod", "go test ./..."))
+                 if (root / f).is_file()), "not derivable")
+
+
+def o_deps(root: Path) -> list[str]:
+    out: list[str] = []
+    t = read(root / "Cargo.toml")
+    out += re.findall(r'^([A-Za-z0-9_.-]+)\s*=', re.search(r'\[dependencies\](.*?)(?:\n\[|\Z)', t, re.S).group(1), re.M) \
+        if re.search(r'\[dependencies\]', t) else []
+    m = re.search(r'dependencies\s*=\s*\[(.*?)\]', read(root / "pyproject.toml"), re.S)
+    if m:
+        # Requirement NAMES, not specs: splitting `click>=8.1, rich` on the comma
+        # is what leaves a bare "," in the table as a row.
+        for spec in re.findall(r'"([^"]+)"', m.group(1)):
+            name = re.split(r"[<>=!~\s;\[]", spec.strip(), maxsplit=1)[0]
+            if re.fullmatch(r"[A-Za-z0-9_.-]+", name or ""):
+                out.append(name)
+    pj = read(root / "package.json")
+    out += re.findall(r'"([^"@\s/][\w./-]*)"\s*:', re.search(r'"dependencies"\s*:\s*\{(.*?)\}', pj, re.S).group(1)) \
+        if re.search(r'"dependencies"', pj) else []
+    return sorted(set(out))
+
+
+def o_wiring(root: Path, src: list[str]) -> list[tuple[str, str]]:
+    if not src:
+        return []
+    base = src[0]
+    top = root / base
+    local = {p.stem for p in top.glob("*.py")} | {p.stem for p in top.glob("*.rs")} | {p.stem for p in top.glob("*.ts")}
+    edges: set[tuple[str, str]] = set()
+    for p in top.rglob("*"):
+        if not p.is_file() or p.suffix not in (".py", ".rs", ".ts") or p.name.startswith("__"):
+            continue
+        t = read(p)
+        for m in re.finditer(r'^\s*(?:from|import)\s+\.([\w.]*)', t, re.M):  # python relative
+            d = m.group(1).lstrip(".").replace(".", "/")
+            if d.split("/")[-1] in local:
+                edges.add((f"{base}/{p.stem}", f"{base}/{d}"))
+        for m in re.finditer(r'^\s*(?:pub(?:\s+\(\w+\))?\s+)?(?:use|mod)\s+(?:crate::)?(\w+)', t, re.M):  # rust
+            if m.group(1) in local:
+                edges.add((f"{base}/{p.stem}", f"{base}/{m.group(1)}"))
+        for m in re.finditer(r'from\s+["\']\./([\w./-]+)["\']', t):  # ts relative
+            edges.add((f"{base}/{p.stem}", f"{base}/{m.group(1).removesuffix('.js')}"))
+    return sorted(edges)
+
+
+def outline_body(cfg: Cfg) -> str:
+    """Derived facts, and nothing that changes without the facts changing.
+
+    There is deliberately NO timestamp and NO commit sha in this zone. A generated file
+    whose stamp changes on every emit reports a diff every time, which trains a reader to
+    skip past it; and a stamp that moves when the tree does not - a sha after a commit,
+    a clock across a midnight - makes `genome outline-check` fail on a tree that has not
+    changed. The zone re-derives from the tree each run, so the body itself is the
+    freshness proof: it differs only when the repository differs.
+    """
+    r = cfg.root
+    lang, ev = o_lang(r)
+    src, entry = o_src(r)
+    deps = o_deps(r)
+    edges = o_wiring(r, src)
+    L = ["**Generated by `genome outline` from the tree. Facts only — how the parts fit "
+         "together is in `docs/OUTLINE.md`.**", "",
+         f"### Language and layout — read from `{ev}`, not from the directory name", "",
+         "| fact | value |", "|---|---|", f"| language | `{lang}` |",
+         f"| source | {' · '.join(f'`{d}/`' for d in src) or 'not derivable'} |",
+         f"| entry point | `{entry or 'not derivable'}` |", "",
+         "### Size — files under the source dirs, excluding build output and vendored code", "",
+         "| language | files |", "|---|---|"]
+    L += [f"| {l} | {n} |" for l, n in o_size(r, src)] or ["| — | none found |"]
+    L += ["", f"### Gate — `{cfg.paths['agents']}` declares it, or it is probed from the manifest", "",
+          "```", o_gate(r), "```", ""]
+    L += ["### Dependencies — direct, from the manifests", "", "| package |", "|---|"]
+    L += [f"| `{d}` |" for d in deps] or ["| none declared |"]
+    L += ["", "### Wiring — one row per internal import edge", "", "| from | to |", "|---|---|"]
+    L += [f"| `{a}` | `{b}` |" for a, b in edges] or ["| — | no internal edges |"]
+    return "\n".join(L) + "\n"
+
+
+def outline_targets(cfg: Cfg) -> list[str]:
+    return [cfg.paths["agents"]]
+
+
+def emit_outline(cfg: Cfg) -> list[str]:
+    changed = []
+    for t in outline_targets(cfg):
+        if not (cfg.root / t).is_file():
+            continue  # `genome init` writes it; a KB without one has nowhere to put the zone
+        if write_zone(cfg.root / t, OUTLINE_ZONE, outline_body(cfg)):
+            changed.append(f"{t}#{OUTLINE_ZONE}")
+    return changed
+
+
+def outline_stale(cfg: Cfg) -> list[str]:
+    """Which targets' zones differ from what the tree derives NOW — read-only.
+
+    A check that writes is not a check: `genome outline-check` in a gate would repair the
+    drift it was asked to report, and the next command would see a clean tree and pass.
+    So this computes the body and compares bytes, the same way `genome lint`'s E104 does
+    for the records zones.
+    """
+    out = []
+    for t in outline_targets(cfg):
+        p = cfg.root / t
+        if not p.is_file():
+            continue
+        body = outline_body(cfg)
+        got = zones(read(p)).get(OUTLINE_ZONE)
+        if got is None or got[1] != body:
+            out.append(f"{t}#{OUTLINE_ZONE}" + ("" if got is None else " (hand-edited or the tree moved)"))
+    return out
+
+
+def cmd_outline(args) -> None:
+    ch = emit_outline(find_cfg())
+    print(f"outline: {', '.join(ch)}" if ch else f"outline: {OUTLINE_ZONE} already current")
+
+
+def cmd_outline_check(args) -> None:
+    bad = outline_stale(find_cfg())
+    if bad:
+        print(f"outline: STALE — {', '.join(bad)}  (run `genome outline`)")
+        raise SystemExit(ERR)
+    print(f"outline: {OUTLINE_ZONE} current")
 # ---------------------------------------------------------------- pointers
 
 PTR_BAD = re.compile(r"[<>{}*$…]|\.\.\.|NNNN|://|^[-~/]")
@@ -1330,6 +1548,14 @@ def research_surfaces(cfg: Cfg) -> list[Path]:
     return cfg.globs(s) if s else [cfg.path(r) for r in ("state", "agents") if cfg.has(r)]
 
 
+def quarantine_surfaces(cfg: Cfg) -> list[Path]:
+    """Where a quarantined figure may not appear: the research surfaces plus every skill reference and audit that
+    quotes measurements (RG-040). The narrow `surfaces` key left the skill references unguarded, so a struck figure
+    could be re-quoted there with no check."""
+    s = cfg.get("research", "quarantine_surfaces")
+    return cfg.globs(s) if s else research_surfaces(cfg)
+
+
 def quarantined(cfg: Cfg) -> list[tuple[str, str]]:
     if not cfg.has("quarantine"):
         return []
@@ -1343,11 +1569,11 @@ def lint_research(cfg: Cfg) -> list[str]:
     fig, cls = figure_re(cfg), class_re(cfg)
     q = quarantined(cfg)
     qpath = cfg.path("quarantine").resolve()
-    for f in research_surfaces(cfg):
+    for f in quarantine_surfaces(cfg):
         text = read(f)
         text = blank_zones(text)
         for h, a, b, body in md_sections(text, "(top)"):
-            if fig.search(body) and not cls.search(body) and not cls.search(h):
+            if f in set(research_surfaces(cfg)) and fig.search(body) and not cls.search(body) and not cls.search(h):
                 n = a + next(i for i, ln in enumerate(body.splitlines()) if fig.search(ln))
                 out.append(f"W201 {cfg.rel(f)}:{n} figure without an evidence class in section '{h[:50]}'")
         if f.resolve() != qpath:
@@ -1587,8 +1813,15 @@ def lint_agents(cfg: Cfg) -> list[str]:
     return out
 
 
+def lint_outline(cfg: Cfg) -> list[str]:
+    """The same E-rule the records zones use, so a stale outline fails `genome lint` and
+    `genome close` by the code a reader already knows, not a new one."""
+    return [f"E104 {s.rsplit(' (', 1)[0]}: zone `{OUTLINE_ZONE}` is stale — `genome outline`"
+            for s in outline_stale(cfg)]
+
+
 CHECKS = {"core": lint_core, "records": lint_records, "research": lint_research, "ops": lint_ops,
-          "agents": lint_agents}
+          "agents": lint_agents, "outline": lint_outline}
 
 
 def run_lint(cfg: Cfg, only: str | None = None) -> list[str]:
@@ -2013,6 +2246,7 @@ def emit_all(cfg: Cfg) -> list[str]:
     changed = emit_records(cfg) if "records" in cfg.modules else []
     if worklog_numbered(cfg) and emit_worklog_index(cfg):
         changed.append(cfg.rel(worklog_index(cfg)))
+    changed += emit_outline(cfg) if "outline" in cfg.modules else []
     return changed + (emit_views(cfg) if cfg.views else []) + emit_status(cfg)
 
 
@@ -2214,6 +2448,10 @@ def cmd_init(args) -> None:
         "research": [("docs/kb/HYPOTHESES.md", HYP_TPL), ("docs/kb/QUARANTINE.md", QUAR_TPL),
                      ("docs/kb/PREREG.md", PREREG_TPL), ("evidence/README.md", EVIDENCE_TPL)],
         "ops": [("docs/INDEX.md", MAP_TPL)],
+        # The outline module's hand-written half. The zone above holds derived facts and
+        # points here; a KB that ships the zone without this file asserts a document that
+        # does not exist, which `genome lint` E001 fails. Neither half is optional.
+        "outline": [("docs/OUTLINE.md", OUTLINE_TPL)],
         "agents": [("docs/kb/feed.md", FEED_TPL)],
     }
     dirs = {"core": ["docs/plans", "docs/audit"], "records": ["docs/decisions", "docs/regressions"],
@@ -2254,6 +2492,7 @@ MODULE_HELP = {
     "research": "figure, quarantine, hyp add|verdict|list, prereg freeze|check (evidence discipline)",
     "ops": "secrets + lint gates: ownership map, links, unreachable code, tracked bulk, running-job guard",
     "agents": "wf new|add|list, claim, done, claim-register, post, feed (parallel agents)",
+    "outline": "outline | outline-check (the stack zone in AGENTS.md, derived from the tree)",
 }
 
 
@@ -2875,7 +3114,10 @@ def cmd_feed(args) -> None:
 # ---------------------------------------------------------------- templates
 
 def genome_toml(mods: list[str], gate: str) -> str:
-    roles = [r for m in mods for r in MODULE_ROLES[m]]
+    # A role may belong to more than one module — `outline` writes into the same
+    # `agents` file `core` owns — and writing its path twice is a duplicate TOML key,
+    # which tomllib refuses. First module wins; the order is MODULES'.
+    roles = list(dict.fromkeys(r for m in mods for r in MODULE_ROLES[m]))
     out = ["# genome.toml — modules on, role → path map, module settings. Edit freely.",
            "[genome]", f"schema_version = {SCHEMA_VERSION}", f"modules = {json.dumps(mods)}", "", "[paths]"]
     out += [f'{r} = "{DEFAULT_PATHS[r]}"' for r in roles]
@@ -2906,6 +3148,35 @@ def genome_toml(mods: list[str], gate: str) -> str:
     return "\n".join(out) + "\n"
 
 
+# The hand-written half of the outline. The `stack` zone in AGENTS.md holds the
+# derived facts; this file holds what a generator cannot: the one rule that shaped the
+# system, and the order to read it in. Amend it when a decision changes the shape.
+OUTLINE_TPL = """# Outline — <name>
+
+One paragraph: what this is, who it is for, and the one thing it must never do.
+
+## The shape
+
+A mermaid diagram and a component table.
+
+## The one rule
+
+The single constraint that shapes everything else.
+
+## How the parts wire
+
+The import graph in prose, with the rule each edge encodes.
+
+## How to check it
+
+The gate command, and what green means.
+
+## Reading order
+
+The documents to read next, in order.
+"""
+
+
 def agents_tpl(mods: list[str], gate: str) -> str:
     rows_ = [("what is this / how to build / the rules (for agents)", "this file"),
              ("what is this, how do I install and run it (for readers)", "`README.md`"),
@@ -2933,6 +3204,9 @@ def agents_tpl(mods: list[str], gate: str) -> str:
     if "agents" in mods:
         rows_ += [("cross-agent messages, claims, mentions", "`docs/kb/feed.md`"),
                   ("in-flight work per workflow", "`docs/kb/workflows/`")]
+    if "outline" in mods:
+        rows_ += [("the stack: language, size, wiring, gate (generated)", "the `stack` zone below — `genome outline`"),
+                  ("how those parts fit together, and the reading order", "`docs/OUTLINE.md`")]
     table = "\n".join(f"| {q} | {a} |" for q, a in rows_)
     return f"""# AGENTS.md — the entry contract
 
@@ -5747,7 +6021,9 @@ def main() -> None:
     s.add_argument("--code", nargs="+", help="only these codes, e.g. E303 W007")
     s.add_argument("--all", action="store_true", help="print every finding (default: 5 per code)")
     add("doctor", cmd_doctor, "staleness, append-only violations, unapplied rulings, running-job edits")
-    add("emit", cmd_emit, "regenerate every genome zone (records, ID map, worklog index); close does this too")
+    add("emit", cmd_emit, "regenerate every genome zone (records, ID map, worklog index, outline); close does this too")
+    add("outline", cmd_outline, "emit the stack outline zone (derived facts; the prose is docs/OUTLINE.md)")
+    add("outline-check", cmd_outline_check, "exit 2 when the stack outline zone is stale (a gate)")
     s = add("wake", cmd_wake, "one-call orientation: state, resume, asks, jobs, inbox, health")
     s.add_argument("--write", action="store_true", help="regenerate the handoff zone (was `handoff --write`)")
     s = add("ask", cmd_ask, "question → the owning sections (path:lines)")

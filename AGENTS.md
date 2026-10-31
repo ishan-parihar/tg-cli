@@ -6,7 +6,7 @@ end every iteration with `genome close`.
 
 ## What this project is
 
-A Telethon-based Telegram CLI (`kabi-tg-cli`, command `tg`) that mirrors the user's own Telegram account into a local SQLite cache for sync, search, export, and agent-friendly retrieval in JSON, YAML, or TOON. The entry point is `tg_cli.cli.main:cli`, installed with `uv tool install kabi-tg-cli`. It runs as the account owner over MTProto, not the Bot API.
+A Telethon-based Telegram CLI (`tg-lyr`, command `tg`) that mirrors the user's own Telegram account into a local SQLite cache for sync, search, export, and agent-friendly retrieval in JSON, YAML, or TOON. The entry point is `tg_cli.cli.main:cli`, installed with `uv tool install tg-lyr`. It runs as the account owner over MTProto, not the Bot API.
 
 ## Gate
 

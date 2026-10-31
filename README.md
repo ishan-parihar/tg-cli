@@ -5,8 +5,8 @@
 Every document in `docs/` is listed with the question it answers in [docs/PAGE-INDEX.md](docs/PAGE-INDEX.md).
 <!-- T2I HERO SPEC — Subject: a local-first Telegram mirror — your Telegram account (MTProto) on the left syncing into a local SQLite cache vault, with search/export/agent-query beams (JSON, YAML, TOON) fanning out to an AI agent on the right; a clock/automation ring around the vault. Composition: left-to-right sync pipeline, vault as the center of gravity. Palette: Telegram sky #229ed9 → deep slate #0f172a → cache emerald #34d399 → agent violet #8b5cf6. Style: dark flat vector, glowing sync pulses, no text. 16:9. -->
 
-[![CI](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-cli/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/kabi-tg-cli)](https://pypi.org/project/kabi-tg-cli/) ![Language](https://img.shields.io/badge/Python-3.11-blue?logo=python) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Version](https://img.shields.io/pypi/v/kabi-tg-cli?label=version)](https://pypi.org/project/kabi-tg-cli/) > **PyPI package:** [`kabi-tg-cli`](https://pypi.org/project/kabi-tg-cli/) — install with `uv tool install kabi-tg-cli` Telethon-powered Telegram CLI for local-first sync, search, export, and agent-friendly retrieval.
+[![CI](https://github.com/ishan-parihar/tg-lyr/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/ishan-parihar/tg-lyr/actions/workflows/ci.yml) [![PyPI](https://img.shields.io/pypi/v/tg-lyr)](https://pypi.org/project/tg-lyr/) ![Language](https://img.shields.io/badge/Python-3.11-blue?logo=python) [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Version](https://img.shields.io/pypi/v/tg-lyr?label=version)](https://pypi.org/project/tg-lyr/) > **PyPI package:** [`tg-lyr`](https://pypi.org/project/tg-lyr/) — install with `uv tool install tg-lyr` Telethon-powered Telegram CLI for local-first sync, search, export, and agent-friendly retrieval.
 
 ---
 
@@ -84,11 +84,11 @@ Mechanism: local-first. Queries hit SQLite by default. `tg refresh` (or `--sync-
 curl -fsSL https://raw.githubusercontent.com/ishan-parihar/tg-cli/main/install.sh | bash
 
 # Recommended: uv tool (isolated, fast, auto-updates)
-uv tool install kabi-tg-cli
+uv tool install tg-lyr
 
 # Or: pipx / pip
-pipx install kabi-tg-cli
-pip install kabi-tg-cli
+pipx install tg-lyr
+pip install tg-lyr
 ```
 
 Upgrade:
@@ -97,8 +97,8 @@ Upgrade:
 tg update --check
 tg update
 # `tg upgrade` is an alias for `tg update`
-uv tool upgrade kabi-tg-cli
-# or: pipx upgrade kabi-tg-cli
+uv tool upgrade tg-lyr
+# or: pipx upgrade tg-lyr
 ```
 
 The CLI delegates to the detected `uv`, `pipx`, or virtual-environment `pip`
@@ -107,13 +107,13 @@ installation. It refuses to modify an editable or unrecognized installation.
 From GitHub (latest main):
 
 ```bash
-uv tool install git+https://github.com/ishan-parihar/tg-cli.git
+uv tool install git+https://github.com/ishan-parihar/tg-lyr.git
 ```
 
 From source:
 
 ```bash
-git clone https://github.com/ishan-parihar/tg-cli.git
+git clone https://github.com/ishan-parihar/tg-lyr.git
 cd tg-cli
 uv sync --extra dev
 ```
@@ -144,7 +144,7 @@ tg filter "Rust,Golang,remote" --hours 48 --sync-first --yaml
 
 **First install on a new box:**
 ```bash
-uv tool install kabi-tg-cli    # or: pipx install kabi-tg-cli
+uv tool install tg-lyr    # or: pipx install tg-lyr
 tg auth                        # prompts for phone + code; daemon auto-starts
 ```
 

@@ -368,7 +368,7 @@ wheels = [
 ]
 
 [[package]]
-name = "kabi-tg-cli"
+name = "tg-lyr"
 version = "0.8.2"
 source = { editable = "." }
 dependencies = [

@@ -1,5 +1,5 @@
 ---
-name: tg-cli
+name: tg-lyr
 description: CLI skill for Telegram to sync chats, search messages, filter keywords, send messages, and run a persistent client daemon with agent-safe queueing
 author: jackwener
 version: "0.8.2"
@@ -21,12 +21,12 @@ CLI tool for Telegram — sync chats, search messages, filter keywords, send mes
 
 ```bash
 # Install (requires Python 3.10+)
-uv tool install kabi-tg-cli
-# Or: pipx install kabi-tg-cli
+uv tool install tg-lyr
+# Or: pipx install tg-lyr
 
 # Upgrade to latest (recommended to avoid API errors)
-uv tool upgrade kabi-tg-cli
-# Or: pipx upgrade kabi-tg-cli
+uv tool upgrade tg-lyr
+# Or: pipx upgrade tg-lyr
 ```
 
 ## Authentication

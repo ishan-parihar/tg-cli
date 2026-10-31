@@ -144,7 +144,7 @@ def _show_home_view():
 
 
 @click.group(invoke_without_command=True)
-@click.version_option(package_name="kabi-tg-cli")
+@click.version_option(package_name="tg-lyr")
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool):
@@ -172,9 +172,13 @@ def update_command(check: bool, as_json: bool) -> None:
 
     args = [*( ["--check"] if check else []), *( ["--json"] if as_json else [])]
     raise click.exceptions.Exit(
-        run_update(args, application="tg-cli", package="kabi-tg-cli")
+        run_update(args, application="tg-cli", package="tg-lyr")
     )
+
+
 cli.add_command(update_command, "upgrade")
+
+
 @cli.command()
 @click.option("--claude", is_flag=True, help="Install Claude Code hook (~/.claude/settings.json)")
 @click.option("--codex", is_flag=True, help="Install Codex hook (~/.codex/hooks.json)")
@@ -313,7 +317,7 @@ async def on_chat_end():
 @cli.command("donate")
 def donate():
     """Support development 💜"""
-    print("Star the repo  : https://github.com/ishan-parihar/tg-cli")
+    print("Star the repo  : https://github.com/ishan-parihar/tg-lyr")
     print("GitHub Sponsors: https://github.com/sponsors/ishan-parihar")
     print("Razorpay (UPI) : https://rzp.io/rzp/ishan-parihar")
 

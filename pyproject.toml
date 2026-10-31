@@ -5,7 +5,7 @@ requires = ["hatchling>=1.27,<1.29"]
 build-backend = "hatchling.build"
 
 [project]
-name = "kabi-tg-cli"
+name = "tg-lyr"
 version = "0.8.2"
 description = "Telethon-powered Telegram CLI for local sync, search, and agent-friendly retrieval"
 readme = "README.md"

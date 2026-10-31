@@ -9,8 +9,8 @@ IFS=$'\n\t'
 # Handles clean system setup including uv installation and dependency management.
 # ──────────────────────────────────────────────────────────────────────
 
-NAME="tg-cli"
-REPO="https://github.com/ishan-parihar/tg-cli.git"
+NAME="tg-lyr"
+REPO="https://github.com/ishan-parihar/tg-lyr.git"
 REPO_GIT="git+${REPO}"
 BIN="tg"
 MIN_PYTHON_VERSION="3.10"
@@ -153,7 +153,7 @@ install_with_uv() {
             ensure_path "$BIN_DIR"
             return 0
         else
-            warn "Could not locate installed binary. Check: $1 -m pip show kabi-tg-cli"
+            warn "Could not locate installed binary. Check: $1 -m pip show tg-lyr"
             return 0
         fi
     fi
@@ -221,7 +221,7 @@ install_pip() {
             ensure_path "$BIN_DIR"
             return 0
         else
-            warn "Could not locate installed binary. Check: $py -m pip show kabi-tg-cli"
+            warn "Could not locate installed binary. Check: $py -m pip show tg-lyr"
             return 0
         fi
     fi
@@ -343,7 +343,7 @@ finish() {
     echo "  4. tg setup --all        # install AI agent session hooks"
     echo
     print_cta
-    info "Upgrade anytime:  uv tool upgrade kabi-tg-cli"
+    info "Update anytime:  tg update --check && tg update"
 }
 
 main "$@"
